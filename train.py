@@ -6,6 +6,7 @@ from pathlib import Path
 
 from models.methods import Network
 from models.networks import LinearRegres, NonLinearRegres
+from models.metrics import euclidean_distance, plot_distances
 from utils.data import check_path, graph_dumper, two_session_graph_loader
 from utils.graphs import GraphFromCSV, create_anat_prior, load_anat_prior
 from utils.paths import get_subjects, get_info
@@ -42,16 +43,19 @@ if __name__ == '__main__':
     graph_path = check_path(folder+'csv/')
     png_path = check_path(folder+'png/')
     flat_path = check_path(folder+'flat/')
+    metrics_csv_path = check_path(folder+'metrics/numerical/')
+    metrics_fig_path = check_path(folder+'metrics/figures/')
 
-    # Loading training data
+    # Training data
     data, subjects = two_session_graph_loader('data/', rois=args.rois, augmentation=args.augment)
-    # Creating/loading priors
+
+    # Creating or loading priors
     if args.prior:
         prior, mean_connections = load_anat_prior('data/')
     else:
         prior, mean_connections = create_anat_prior('data/', save=True)
 
-    # Defining the objects
+    # Defining the objects and training the model
     if args.regressor.lower() == 'linear':
         regres = LinearRegres(args.rois)
     else:
@@ -59,14 +63,18 @@ if __name__ == '__main__':
     mse = nn.MSELoss()
     sgd = optim.SGD(regres.parameters(), lr=0.01)
     model = Network(regres, sgd, mse, data, args)
-
-    # Training the model and saving
-    model.train()
+    train_predictions, val_predictions = model.train()
+    preds = torch.cat((train_predictions, val_predictions), dim=0).cpu()
     torch.save(regres, folder+args.model+'.ckpt')
 
-    # Test with the same data and save the results
-    prediction = model.test(data[0])
-    graph_dumper(graph_path, prediction.cpu(), subjects, suffix='predicted')
+    # Weighting predictions with anatomical priors
+    for t in range(preds.shape[0]):
+        preds[t] = torch.mul(preds[t], prior)
+
+    # Saving Predicted Outputs
+    print("================")
+    print("Saving Outputs ...")
+    graph_dumper(graph_path, preds, subjects, suffix='predictions')
     graph_files = get_subjects(folder, session='csv')
     for f in graph_files:
         _, _, _, name = get_info(f)
@@ -74,3 +82,29 @@ if __name__ == '__main__':
         sg.unflatten_graph(to_default=True, save_flat=True)
         sg.process_graph(log=False, reshuffle=True)
         Path(png_path+name+'_flatCM.csv').rename(flat_path+name+'_flatCM.csv')
+
+    print("================")
+    print("Computing Error Metrics ...")
+    # Compute metrics to asses the reliability of the generated graphs
+    mse, edge_mse = euclidean_distance(preds, data[1])
+    graph_dumper(metrics_csv_path, mse, ["Graphs_Error"], suffix='Mean')
+    graph_dumper(metrics_csv_path, edge_mse, subjects, suffix='Edge_Distance')
+    edge_avg, edge_std = plot_distances((mse, edge_mse), metrics_fig_path, subjects)
+    graph_dumper(metrics_csv_path, torch.stack((edge_avg, edge_std), dim=0), ["Edge_Error", "Edge_Std"], suffix='avg')
+    sg = GraphFromCSV(metrics_csv_path+"Edge_Error_avg.csv", "Edge_Error_avg", metrics_fig_path)
+    sg.unflatten_graph(to_default=True, save_flat=False)
+    sg.process_graph(log=False, reshuffle=True, bar_label='Distance')
+    sg = GraphFromCSV(metrics_csv_path+"Edge_Std_avg.csv", "Edge_Std_avg", metrics_fig_path)
+    sg.unflatten_graph(to_default=True, save_flat=False)
+    sg.process_graph(log=False, reshuffle=True, bar_label='Standard Deviation')
+    error_files = get_subjects(folder+'metrics/', session='numerical', subject_ID="sub")
+    for f in error_files:
+        _, _, _, name = get_info(f)
+        sg = GraphFromCSV(f, name, metrics_fig_path)
+        sg.unflatten_graph(to_default=True, save_flat=False)
+        sg.process_graph(log=False, reshuffle=True, bar_label='Distance')
+
+    print("=====Logs=======")
+    print("Mean Absolut Error of the Regression:", torch.mean(mse))
+    print("Mean STD of the Absolut Error:", torch.std(mse))
+    

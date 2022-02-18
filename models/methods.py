@@ -89,6 +89,12 @@ class Network(nn.Module):
                     wandb.log({"Batch validation Loss": loss_val}, step=ep)
             # Live updating
             wandb.watch(self.network)
+        # Return the predicted graphs for both training and validation sets
+        with torch.no_grad():
+            tr_pred = self.network(self.train_data[0])
+            if self.val_step:
+                val_pred = self.network(self.val_data[0])
+        return tr_pred, val_pred
 
     def test(self, x):
         """ Generates a prediction of a given batch """

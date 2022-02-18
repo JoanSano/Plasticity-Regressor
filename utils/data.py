@@ -29,9 +29,13 @@ def graph_dumper(data_path, graphs, subject_list, suffix='evolved'):
     Output: 
         None
     """
+    dims = len(graphs.shape)
     for i, sub in enumerate(subject_list):
-        name = sub + '_'+suffix+'.csv'
-        gr = graphs[i].numpy().reshape((1,graphs.shape[-1]))
+        name = sub+'_'+suffix+'.csv'
+        if dims == 1:
+            gr = graphs.numpy().reshape((1, graphs.shape[-1]))
+        else:
+            gr = graphs[i].numpy().reshape((1,graphs.shape[-1]))
         dataframe = pd.DataFrame(data=gr.astype(float))
         dataframe.to_csv(data_path+name, sep=',', header=False, float_format='%.6f', index=False)
 

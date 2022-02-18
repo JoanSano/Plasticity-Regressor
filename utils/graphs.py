@@ -63,7 +63,7 @@ class GraphFromCSV:
 
         self.conns = np.log1p(self.conns)
 
-    def __plot_graph(self, save=True, show=False, fig_size=(20,15)):
+    def __plot_graph(self, save=True, show=False, fig_size=(20,15), bar_label='Connection Strength'):
         """
         Plot a graph. It assumes that the adjancency matrix is a csv file.
         """
@@ -71,14 +71,14 @@ class GraphFromCSV:
         plt.figure(figsize=fig_size)
         plt.imshow(self.conns)
         cbar = plt.colorbar()
-        cbar.set_label('Connection Strength', rotation=270)
+        cbar.set_label(bar_label, rotation=270)
         plt.tight_layout()
         if save:
             plt.savefig(self.dir+self.name+'.png')      
         if show:
             plt.show()     
 
-    def process_graph(self, log=True, reshuffle=True, save=True, show=False, fig_size=(20,15)):
+    def process_graph(self, log=True, reshuffle=True, save=True, show=False, fig_size=(20,15), bar_label='Connection Strength'):
         """
         Applies default operations to the graph to work with it.
         """
@@ -91,7 +91,7 @@ class GraphFromCSV:
                 self.__take_log()
             if reshuffle:
                 self.__revert()
-            self.__plot_graph(save=True, show=False, fig_size=(20,15))
+            self.__plot_graph(save=True, show=False, fig_size=(20,15), bar_label=bar_label)
     
     def get_connections(self, ini=False):
         """ 

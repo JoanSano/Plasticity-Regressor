@@ -54,6 +54,9 @@ if __name__ == '__main__':
         prior, mean_connections = load_anat_prior('data/')
     else:
         prior, mean_connections = create_anat_prior('data/', save=True)
+        sg = GraphFromCSV('data/prior.csv', 'prior', 'data/')
+        sg.unflatten_graph(to_default=True, save_flat=True)
+        sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
 
     # Defining the objects and training the model
     if args.regressor.lower() == 'linear':

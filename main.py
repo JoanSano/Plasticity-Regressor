@@ -113,9 +113,9 @@ if __name__ == '__main__':
     
     # Saving the mean model
     final_regres.load_state_dict(final_model)
-    torch.save(final_regres, folder+args.model+'.ckpt') # TODO: check that the mean is correctly done
+    torch.save(final_regres, folder+args.model+'.ckpt') 
     # TOMORROW: 
-    # # 1 - check 
+    # # 1 - check that the mean is correctly done
     # # 2 - prepare Hippo 
     # # 3 - train
     # # 4 - graphical results and figures and tables

@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
-from tqdm import tqdm
 import wandb
 import warnings
 
@@ -52,8 +51,8 @@ class Network(nn.Module):
     def __epoch(self, loader, backprop):
         epoch_loss, num_batches = [0, 0]
         for input_batch, target_batch in zip(loader[0], loader[1]):
-            input_batch = input_batch.to(self.args.device)
-            target_batch = target_batch.to(self.args.device)
+            input_batch = input_batch.double().to(self.args.device)
+            target_batch = target_batch.double().to(self.args.device)
             
             prediction = self.network(input_batch)
             loss = self.criterion(prediction, target_batch)
@@ -69,10 +68,11 @@ class Network(nn.Module):
 
     def train(self):
         """ Trains the model. If specified and if possible also doing validation."""
-        wandb.init(project="Plasticity-Regressor", entity="joansano")
-        wandb.config.update(self.args)
+        if self.args.wandb: 
+            wandb.init(project="Plasticity-Regressor", entity="joansano")
+            wandb.config.update(self.args)
         tr_loader, val_loader = list(), list()
-        for ep in tqdm(range(1, self.args.epochs+1)):
+        for ep in range(1, self.args.epochs+1):
             # Loading training and validation data
             for domain in range(len(self.train_data)):
                 tr_loader.append(DataLoader(self.train_data[domain], batch_size=self.args.batch, shuffle=True))
@@ -81,25 +81,32 @@ class Network(nn.Module):
             # Training   
             with torch.enable_grad():
                 loss_tr = self.__epoch(tr_loader, backprop=True)
-                wandb.log({"Batch Training Loss": loss_tr}, step=ep)
+                if self.args.wandb: 
+                    wandb.log({"Batch Training Loss": loss_tr}, step=ep)
+                else:
+                    print("Epoch {}/{}: Training loss: {}".format(ep, self.args.epochs, loss_tr))
             # Validation
-            if self.val_step:
+            if self.val_step and (ep%self.args.val_freq==0):
                 with torch.no_grad():
                     loss_val = self.__epoch(val_loader, backprop=False)
-                    wandb.log({"Batch validation Loss": loss_val}, step=ep)
+                    if self.args.wandb: 
+                        wandb.log({"Batch validation Loss": loss_val}, step=ep)
+                    else:
+                        print("===== Validation loss: {} =====".format(loss_val))
             # Live updating
-            wandb.watch(self.network)
+            if self.args.wandb: 
+                wandb.watch(self.network)
         # Return the predicted graphs for both training and validation sets
         with torch.no_grad():
-            tr_pred = self.network(self.train_data[0])
+            tr_pred = self.network(self.train_data[0].double())
             if self.val_step:
-                val_pred = self.network(self.val_data[0])
-        return tr_pred, val_pred
+                val_pred = self.network(self.val_data[0].double())
+        return tr_pred, val_pred if self.val_step else None
 
     def test(self, x):
         """ Generates a prediction of a given batch """
         with torch.no_grad():
-            return self.network(x.to(self.args.device))
+            return self.network(x.double().to(self.args.device))
 
 if __name__ == '__main__':
     pass

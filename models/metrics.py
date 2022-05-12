@@ -1,9 +1,66 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import pandas as pd
 import matplotlib.pylab as plt
 import seaborn as sns
+
+class BayesianWeightedLoss(nn.Module):
+    def __init__(self, anat_prior):
+        super().__init__()
+        self.prior = anat_prior
+        self.mse = nn.MSELoss()
+
+    def forward(self, output, target):
+        # This loss function can be tweeked to include topological features, cosine similarity
+        #   or even maximizin the KL divergence with respect to the control group...?
+        posterior = output * 0
+        for t in range(output.shape[0]):
+            posterior[t] = torch.mul(output[t], self.prior)
+        return self.mse(posterior, target) 
+
+class PCC(nn.Module):
+    def __init__(self, dim=1):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, output, target):
+        """
+        NOT SURE THIS METRIC MAKES SENSE IN THIS CASE!!!
+        Inputs:
+            output: network output tensor of size (N, Features) N>1! 
+            target: tensor of size (N, Features)
+        Outputs:
+            cc: correlation coefficient of each feature - tensor of size (Features,)
+            mean_cc: mean correlation coefficient - scalar 
+        """
+
+        vx = output - torch.mean(output, dim=self.dim)
+        vy = target - torch.mean(target, dim=self.dim)
+        cc = torch.sum(vx * vy, dim=self.dim) / (torch.sqrt(torch.sum(vx ** 2, dim=self.dim)) * torch.sqrt(torch.sum(vy ** 2, dim=self.dim)))
+        mean_cc = torch.mean(cc)
+        std_cc = torch.std(cc)
+        return cc, mean_cc, std_cc
+
+class CosineSimilarity(nn.Module):
+    def __init__(self, dim=1):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, output, target):
+        """
+        Inputs:
+            output: network output tensor of size (N, Features)
+            target: tensor of size (N, Features)
+        Outputs:
+            cs: cosine similarity of each feature vector - tensor of size (N,)
+            mean_cs: mean cosine similarity - scalar 
+        """
+
+        cos = nn.CosineSimilarity(dim=self.dim)
+        cs = cos(output, target)
+        mean_cs = torch.mean(cs)
+        std_cs = torch.std(cs)
+        return cs, mean_cs, std_cs
 
 def euclidean_distance(pred, real):
     """ Computes the Euclidean Distance between a predicted and real graph. 

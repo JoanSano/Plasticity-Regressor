@@ -7,7 +7,7 @@ from sklearn.model_selection import LeaveOneOut
 from pathlib import Path
 import pandas as pd
 
-from models.methods import Network
+from models.methods import Model, return_specs
 from models.networks import LinearRegres, NonLinearRegres
 from models.metrics import euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity
 from utils.data import check_path, graph_dumper, two_session_graph_loader, prepare_data
@@ -20,19 +20,23 @@ parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in 
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
 parser.add_argument('-M', '--model', type=str, default='model', help="Trained model name")
 parser.add_argument('-W', '--wandb', type=bool, default=False, help="Whether to use wandb")
+parser.add_argument('--null_model', type=bool, choices=[False, True], help="Whether not to train the model to obtain a benchmark")
 
 # Data specs
 parser.add_argument('-S', '--split', type=int, default=20, help="Training and testing splitting")
-parser.add_argument('-R', '--rois', type=int, default=170, help="Number of ROIs to use")
+parser.add_argument('-R', '--rois', type=int, default=166, help="Number of ROIs to use")
 parser.add_argument('-A', '--augment', type=int, default=1, help="Data augmentation factor")
 parser.add_argument('-V', '--validation', type=bool, default=False, help="Add validation step")
 parser.add_argument('-P', '--prior', type=bool, default=False, help="Load available prior")
 
 # Machine-learning specs
 parser.add_argument('-E', '--epochs', type=int, default=2, help="Number of epochs to train")
+parser.add_argument('-LR', '--learning_rate', type=float, default=0.01, help="Learning Rate")
+parser.add_argument('-O', '--optimizer', type=str, default='sgd', help="Optimizer")
 parser.add_argument('--val_freq', type=int, default=5, help="Number of epochs between validation steps")
 parser.add_argument('-B', '--batch', type=int, default=4, help="Batch size")
 parser.add_argument('-RE', '--regressor', type=str, default='linear', choices=['linear','nonlinear'], help="Type of regression")
+parser.add_argument('-L', '--loss', type=str, default='bayes_mse', choices=['bayes_mse', 'huber'], help="Reconstruction loss")
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -53,15 +57,16 @@ if __name__ == '__main__':
 
     # Preparing data
     (CONTROL, CON_subjects), (data, PAT_subjects), (PAT_1session, PAT_1session_subjects) = prepare_data(
-    'data/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=None #[35,36,81,82]
+    'data/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=[35,36,81,82]
     )
 
     # Creating or loading priors
+    # TODO: Improve the prior generation (maybe?) 
     if args.prior:
         prior, mean_connections = load_anat_prior('data/')
     else:
-        prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True, rois=170)
-        sg = GraphFromCSV('data/prior.csv', 'prior', 'data/')
+        prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True)
+        sg = GraphFromCSV('data/prior.csv', 'prior', 'data/', rois=args.rois)
         sg.unflatten_graph(to_default=True, save_flat=True)
         sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
 
@@ -69,32 +74,26 @@ if __name__ == '__main__':
     CV = LeaveOneOut()
     N_folds = CV.get_n_splits(data[0])
     CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity'])
-    if args.regressor.lower() == 'linear': 
-        final_regres = LinearRegres(args.rois)
-    else:
-        final_regres = NonLinearRegres(args.rois)
+    final_regres, _, _ = return_specs(args, prior=prior)
     final_model = final_regres.state_dict()
 
     for fold, (train_index, test_index) in enumerate(CV.split(data[0])):
-        print("=========================================")
+        print("=============================================")
         print("Fold number {} out of {} \n".format(fold+1, N_folds))
 
-        input_train, input_test = data[0][train_index], data[0][test_index]
+        input_train, input_test = data[0][train_index], data[0][test_index].to(args.device)
         target_train, target_test = data[1][train_index], data[1][test_index]
         data_fold = (input_train, target_train)
         subject = PAT_subjects[test_index[0]]
 
-        # Defining the objects
-        if args.regressor.lower() == 'linear': 
-            regres = LinearRegres(args.rois)
-        else:
-            regres = NonLinearRegres(args.rois)
-        mse = BayesianWeightedLoss(prior) #nn.MSELoss()
-        sgd = optim.SGD(regres.parameters(), lr=0.01)
-        model = Network(regres, sgd, mse, data_fold, args)
+        # Defining the model
+        # TODO: Add a function 
+        regres, loss, optimizer = return_specs(args, prior=prior.to(args.device))
+        model = Model(regres, optimizer, loss, data_fold, args)
 
         # Training and testing
-        model.train()
+        if not args.null_model:
+            model.train()
         pred_LOO = model.test(input_test).cpu()
 
         # Metrics
@@ -115,11 +114,12 @@ if __name__ == '__main__':
     final_regres.load_state_dict(final_model)
     torch.save(final_regres, folder+args.model+'.ckpt') 
     # TOMORROW: 
-    # # 1 - check that the mean is correctly done
-    # # 2 - prepare Hippo 
-    # # 3 - train
-    # # 4 - graphical results and figures and tables
-    # # 5 - continue writing 
+    # # 1 - check that the mean is correctly done - OK
+    # # 2 - prepare Hippo - OK
+    # # 3 - train - OK
+    # # 4 - Degree distribution and KL JS divergence
+    # # 5 - Run the different models
+    # # 6 - save outputs
 
     # Saving performance evaluation
     CV_summary.to_csv(folder+args.model+'_performance.tsv', sep='\t', index=False)
@@ -128,6 +128,7 @@ if __name__ == '__main__':
     # https://discuss.pytorch.org/t/average-each-weight-of-two-models/77008
 
     # Saving Predicted Outputs
+    # REMEMBER TO ADD THE PREVIOUSLY DELETED ROIS IF YOU WANT TO COMPARE WITH ATLAS
     """ 
     print("================")
     print("Saving Outputs ...")

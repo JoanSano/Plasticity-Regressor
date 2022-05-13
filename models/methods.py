@@ -1,11 +1,15 @@
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
+import torch.optim as optim
 from sklearn.model_selection import train_test_split
 import wandb
 import warnings
 
-class Network(nn.Module):
+from models.networks import LinearRegres, NonLinearRegres
+from models.metrics import BayesianWeightedLoss
+
+class Model(nn.Module):
     """ Generic object with methods common to different networks. 
     Shoud be usable for other frameworks. 
     """
@@ -92,21 +96,47 @@ class Network(nn.Module):
                     if self.args.wandb: 
                         wandb.log({"Batch validation Loss": loss_val}, step=ep)
                     else:
-                        print("===== Validation loss: {} =====".format(loss_val))
+                        print("Validation loss: {}".format(loss_val))
             # Live updating
             if self.args.wandb: 
                 wandb.watch(self.network)
-        # Return the predicted graphs for both training and validation sets
-        with torch.no_grad():
-            tr_pred = self.network(self.train_data[0].double())
-            if self.val_step:
-                val_pred = self.network(self.val_data[0].double())
-        return tr_pred, val_pred if self.val_step else None
 
     def test(self, x):
         """ Generates a prediction of a given batch """
         with torch.no_grad():
             return self.network(x.double().to(self.args.device))
+
+def return_specs(args, prior=None):
+    """
+    Returns the object necessary to build the model
+    Inputs:
+        args: argparser containing the input arguments
+        prior: (optional) Necessary to build the bayesian weighted loss function
+    Returns:
+        regres: torch network to train (python object)
+        loss: torch loss function used to train the network (python object)
+        sgd: torch object used to train train the network (python object)
+    """
+    if args.regressor == 'linear': 
+        regres = LinearRegres(args.rois)
+    elif args.regressor == 'nonlinear':
+        regres = NonLinearRegres(args.rois)
+    else:
+        raise ValueError("Regressor not implemented")
+
+    if args.loss == 'bayes_mse':
+        loss = BayesianWeightedLoss(prior)
+    elif args.loss == 'huber':
+        loss = nn.HuberLoss()
+    else:
+        raise ValueError("Loss function not implemented")
+
+    if args.optimizer == 'sgd': 
+        sgd = optim.SGD(regres.parameters(), lr=args.learning_rate)
+    else:
+        raise ValueError("Optimizer not implemented")
+
+    return regres, loss, sgd
 
 if __name__ == '__main__':
     pass

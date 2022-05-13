@@ -292,7 +292,7 @@ class GraphFromCSV:
                 self.__init__(self.graph, self.name, self.dir)
             return self.unflat_conns
 
-def create_anat_prior(CONTROL, out_path, rois=170, threshold=.2, save=False):
+def create_anat_prior(CONTROL, out_path, threshold=.2, save=False):
     """ Creates a prior distribution of connections between rois """
     control = np.array(CONTROL, dtype=float)
     prior = torch.mean(torch.tensor(np.where(control>threshold, 1, 0), dtype=float), dim=0)

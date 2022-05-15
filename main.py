@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from sklearn.model_selection import LeaveOneOut
 from pathlib import Path
 import pandas as pd
+import json
 
 from models.methods import Model, return_specs
 from models.networks import LinearRegres, NonLinearRegres
@@ -16,6 +17,7 @@ from utils.paths import get_subjects, get_info
 
 parser = argparse.ArgumentParser()
 # General settings
+parser.add_argument('--train', type=bool, default=False, choices=[False, True], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
 parser.add_argument('-M', '--model', type=str, default='model', help="Trained model name")
@@ -38,6 +40,9 @@ parser.add_argument('-B', '--batch', type=int, default=4, help="Batch size")
 parser.add_argument('-RE', '--regressor', type=str, default='linear', choices=['linear','nonlinear'], help="Type of regression")
 parser.add_argument('-L', '--loss', type=str, default='bayes_mse', choices=['bayes_mse', 'huber'], help="Reconstruction loss")
 args = parser.parse_args()
+
+with open('command_log.txt', 'w') as f:
+    json.dump(args.__dict__, f, indent=2)
 
 if __name__ == '__main__':
     if args.device == 'cuda':
@@ -73,56 +78,95 @@ if __name__ == '__main__':
     # Cross-Validation
     CV = LeaveOneOut()
     N_folds = CV.get_n_splits(data[0])
-    CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity'])
-    final_regres, _, _ = return_specs(args, prior=prior)
-    final_model = final_regres.state_dict()
 
-    for fold, (train_index, test_index) in enumerate(CV.split(data[0])):
-        print("=============================================")
-        print("Fold number {} out of {} \n".format(fold+1, N_folds))
+    if args.train:
+        # Results
+        CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity'])
+        final_regres, _, _ = return_specs(args, prior=prior)
+        final_model = final_regres.state_dict()
 
-        input_train, input_test = data[0][train_index], data[0][test_index].to(args.device)
-        target_train, target_test = data[1][train_index], data[1][test_index]
-        data_fold = (input_train, target_train)
-        subject = PAT_subjects[test_index[0]]
+        for fold, (train_index, test_index) in enumerate(CV.split(data[0])):
+            print("=============================================")
+            print("Fold number {} out of {} \n".format(fold+1, N_folds))
 
-        # Defining the model
-        # TODO: Add a function 
-        regres, loss, optimizer = return_specs(args, prior=prior.to(args.device))
-        model = Model(regres, optimizer, loss, data_fold, args)
+            input_train, input_test = data[0][train_index], data[0][test_index].to(args.device)
+            target_train, target_test = data[1][train_index], data[1][test_index]
+            data_fold = (input_train, target_train)
+            subject = PAT_subjects[test_index[0]]
 
-        # Training and testing
-        if not args.null_model:
-            model.train()
-        pred_LOO = model.test(input_test).cpu()
+            # Defining the model
+            # TODO: Add a function 
+            regres, loss, optimizer = return_specs(args, prior=prior.to(args.device))
+            model = Model(regres, optimizer, loss, data_fold, args)
 
-        # Metrics
-        test_mse = F.mse_loss(pred_LOO, target_test)
-        test_mae = F.l1_loss(pred_LOO, target_test)
-        _, pcc, _ = PCC().forward(pred_LOO, target_test)
-        _, cs, _ = CosineSimilarity().forward(pred_LOO, target_test)
-        CV_summary.loc[len(CV_summary.index)] = [subject, test_mse.item(), test_mae.item(), pcc.item(), cs.item()]
+            # Training and testing
+            if not args.null_model:
+                model.train()
+            pred_LOO = model.test(input_test).cpu()
 
-        # Creating the final model
-        for key in final_model.keys():
-            if fold==0:
-                final_model[key] = regres.state_dict()[key]
-            else:
-                final_model[key] += regres.state_dict()[key]/N_folds
-    
-    # Saving the mean model
-    final_regres.load_state_dict(final_model)
-    torch.save(final_regres, folder+args.model+'.ckpt') 
-    # TOMORROW: 
-    # # 1 - check that the mean is correctly done - OK
-    # # 2 - prepare Hippo - OK
-    # # 3 - train - OK
-    # # 4 - Degree distribution and KL JS divergence
-    # # 5 - Run the different models
-    # # 6 - save outputs
+            # Metrics
+            test_mse = F.mse_loss(pred_LOO, target_test)
+            test_mae = F.l1_loss(pred_LOO, target_test)
+            _, pcc, _ = PCC().forward(pred_LOO, target_test)
+            _, cs, _ = CosineSimilarity().forward(pred_LOO, target_test)
+            CV_summary.loc[len(CV_summary.index)] = [subject, test_mse.item(), test_mae.item(), pcc.item(), cs.item()]
 
-    # Saving performance evaluation
-    CV_summary.to_csv(folder+args.model+'_performance.tsv', sep='\t', index=False)
+            # Creating the final model
+            for key in final_model.keys():
+                if fold==0:
+                    final_model[key] = regres.state_dict()[key]
+                else:
+                    final_model[key] += regres.state_dict()[key]/N_folds
+        
+        # Saving the mean model
+        final_regres.load_state_dict(final_model)
+        torch.save(final_regres, folder+args.model+'.ckpt') 
+        
+        # # 1 - check that the mean is correctly done - OK
+        # # 2 - prepare Hippo - OK
+        # # 3 - train - OK
+        # # 4 - Degree distribution and KL JS divergence
+        # # 5 - Run the different models
+        # # 6 - save outputs
+
+        # Saving performance evaluation
+        CV_summary.to_csv(folder+args.model+'_LOO-testing.tsv', sep='\t', index=False)
+    else:
+        try:
+            CV_summary = pd.read_csv(folder+args.model+'_LOO-testing.tsv', sep='\t')
+            bayes = torch.tensor(CV_summary['BayesMSE'], dtype=torch.float64)
+            mae = torch.tensor(CV_summary['MAE'], dtype=torch.float64)
+            pcc = torch.tensor(CV_summary['PCC'], dtype=torch.float64)
+            cs = torch.tensor(CV_summary['CosineSimilarity'], dtype=torch.float64)
+        except:
+            raise ValueError('No CV summary found. Run with --train')
+
+    # Reading-loading results
+    bayes = torch.tensor(CV_summary['BayesMSE'], dtype=torch.float64)
+    mae = torch.tensor(CV_summary['MAE'], dtype=torch.float64)
+    pcc = torch.tensor(CV_summary['PCC'], dtype=torch.float64)
+    cs = torch.tensor(CV_summary['CosineSimilarity'], dtype=torch.float64)
+
+    # Mean and Standard Error of the Mean of the current model and metric
+    bayes_mean, bayes_std_T = torch.mean(bayes), torch.std(bayes)/torch.sqrt(torch.tensor(N_folds))
+    mae_mean, mae_std_T = torch.mean(mae), torch.std(mae)/torch.sqrt(torch.tensor(N_folds))
+    pcc_mean, pcc_std_T = torch.mean(pcc), torch.std(pcc)/torch.sqrt(torch.tensor(N_folds))
+    cs_mean, cs_std_T = torch.mean(cs), torch.std(cs)/torch.sqrt(torch.tensor(N_folds))
+    CV_summary.loc[len(CV_summary.index)] = [
+        'Mean +/- SEM', 
+        str(bayes_mean.item())+' +/- '+str(bayes_std_T.item()), 
+        str(mae_mean.item())+' +/- '+str(mae_std_T.item()),
+        str(pcc_mean.item())+' +/- '+str(pcc_std_T.item()),
+        str(cs_mean.item())+' +/- '+str(cs_std_T.item())
+        ]
+
+    # t-scores and counting inside 1,2,3 sigmas
+    t_bayes = (bayes - bayes_mean)/bayes_std_T
+    t_mae = (mae - mae_mean)/mae_std_T
+    t_pcc = (pcc - pcc_mean)/pcc_std_T
+    t_cs = (cs - cs_mean)/cs_std_T
+    one_sigma = [torch.sum((t_bayes<(bayes_mean+bayes_std_T).item())*(t_bayes<(bayes_mean+bayes_std_T).item()))]
+    print('testing stuff')
 
     # To average the models #
     # https://discuss.pytorch.org/t/average-each-weight-of-two-models/77008

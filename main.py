@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -10,14 +11,14 @@ import json
 
 from models.methods import Model, return_specs
 from models.networks import LinearRegres, NonLinearRegres
-from models.metrics import euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity
+from models.metrics import euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity, KL_JS_divergences
 from utils.data import check_path, graph_dumper, two_session_graph_loader, prepare_data
 from utils.graphs import GraphFromCSV, create_anat_prior, load_anat_prior
 from utils.paths import get_subjects, get_info
 
 parser = argparse.ArgumentParser()
 # General settings
-parser.add_argument('--train', type=bool, default=False, choices=[False, True], help="Train the model or just report statistics")
+parser.add_argument('--mode', type=str, default='stats', choices=['train', 'stats'], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
 parser.add_argument('-M', '--model', type=str, default='model', help="Trained model name")
@@ -64,7 +65,7 @@ if __name__ == '__main__':
     (CONTROL, CON_subjects), (data, PAT_subjects), (PAT_1session, PAT_1session_subjects) = prepare_data(
     'data/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=[35,36,81,82]
     )
-
+    
     # Creating or loading priors
     # TODO: Improve the prior generation (maybe?) 
     if args.prior:
@@ -79,9 +80,9 @@ if __name__ == '__main__':
     CV = LeaveOneOut()
     N_folds = CV.get_n_splits(data[0])
 
-    if args.train:
+    if args.mode == 'train':
         # Results
-        CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity'])
+        CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity', 'KL_Div', 'JS_Div'])
         final_regres, _, _ = return_specs(args, prior=prior)
         final_model = final_regres.state_dict()
 
@@ -95,7 +96,6 @@ if __name__ == '__main__':
             subject = PAT_subjects[test_index[0]]
 
             # Defining the model
-            # TODO: Add a function 
             regres, loss, optimizer = return_specs(args, prior=prior.to(args.device))
             model = Model(regres, optimizer, loss, data_fold, args)
 
@@ -109,7 +109,8 @@ if __name__ == '__main__':
             test_mae = F.l1_loss(pred_LOO, target_test)
             _, pcc, _ = PCC().forward(pred_LOO, target_test)
             _, cs, _ = CosineSimilarity().forward(pred_LOO, target_test)
-            CV_summary.loc[len(CV_summary.index)] = [subject, test_mse.item(), test_mae.item(), pcc.item(), cs.item()]
+            kl_div, js_div = KL_JS_divergences(pred_LOO, target_test, rois=args.rois)
+            CV_summary.loc[len(CV_summary.index)] = [subject, test_mse.item(), test_mae.item(), pcc.item(), cs.item(), kl_div.item(), js_div.item()]
 
             # Creating the final model
             for key in final_model.keys():
@@ -121,52 +122,161 @@ if __name__ == '__main__':
         # Saving the mean model
         final_regres.load_state_dict(final_model)
         torch.save(final_regres, folder+args.model+'.ckpt') 
-        
-        # # 1 - check that the mean is correctly done - OK
-        # # 2 - prepare Hippo - OK
-        # # 3 - train - OK
-        # # 4 - Degree distribution and KL JS divergence
-        # # 5 - Run the different models
-        # # 6 - save outputs
 
         # Saving performance evaluation
         CV_summary.to_csv(folder+args.model+'_LOO-testing.tsv', sep='\t', index=False)
-    else:
+
+    if args.mode == 'stats':
         try:
             CV_summary = pd.read_csv(folder+args.model+'_LOO-testing.tsv', sep='\t')
-            bayes = torch.tensor(CV_summary['BayesMSE'], dtype=torch.float64)
-            mae = torch.tensor(CV_summary['MAE'], dtype=torch.float64)
-            pcc = torch.tensor(CV_summary['PCC'], dtype=torch.float64)
-            cs = torch.tensor(CV_summary['CosineSimilarity'], dtype=torch.float64)
         except:
             raise ValueError('No CV summary found. Run with --train')
 
-    # Reading-loading results
-    bayes = torch.tensor(CV_summary['BayesMSE'], dtype=torch.float64)
-    mae = torch.tensor(CV_summary['MAE'], dtype=torch.float64)
-    pcc = torch.tensor(CV_summary['PCC'], dtype=torch.float64)
-    cs = torch.tensor(CV_summary['CosineSimilarity'], dtype=torch.float64)
+        # Reading-loading results
+        PAT_subjects = list(CV_summary['Subject'].values)
+        mse = np.array(CV_summary['BayesMSE'], dtype=np.float64)
+        mae = np.array(CV_summary['MAE'], dtype=np.float64)
+        pcc = np.array(CV_summary['PCC'], dtype=np.float64)
+        cs = np.array(CV_summary['CosineSimilarity'], dtype=np.float64)
+        kl = np.array(CV_summary['KL_Div'], dtype=np.float64)
+        js = np.array(CV_summary['JS_Div'], dtype=np.float64)
 
-    # Mean and Standard Error of the Mean of the current model and metric
-    bayes_mean, bayes_std_T = torch.mean(bayes), torch.std(bayes)/torch.sqrt(torch.tensor(N_folds))
-    mae_mean, mae_std_T = torch.mean(mae), torch.std(mae)/torch.sqrt(torch.tensor(N_folds))
-    pcc_mean, pcc_std_T = torch.mean(pcc), torch.std(pcc)/torch.sqrt(torch.tensor(N_folds))
-    cs_mean, cs_std_T = torch.mean(cs), torch.std(cs)/torch.sqrt(torch.tensor(N_folds))
-    CV_summary.loc[len(CV_summary.index)] = [
-        'Mean +/- SEM', 
-        str(bayes_mean.item())+' +/- '+str(bayes_std_T.item()), 
-        str(mae_mean.item())+' +/- '+str(mae_std_T.item()),
-        str(pcc_mean.item())+' +/- '+str(pcc_std_T.item()),
-        str(cs_mean.item())+' +/- '+str(cs_std_T.item())
+        #################################################################################################
+        ### Mean and Standard Error of the Mean of the current model and metric ==> E +/- STD/SQRT(N) ###
+        #################################################################################################
+        mse_mean, mse_std= np.mean(mse), np.std(mse)
+        mae_mean, mae_std = np.mean(mae), np.std(mae)
+        pcc_mean, pcc_std = np.mean(pcc), np.std(pcc)
+        cs_mean, cs_std = np.mean(cs), np.std(cs)
+        kl_mean, kl_std = np.mean(kl), np.std(kl)
+        js_mean, js_std = np.mean(js), np.std(js)
+        CV_summary.loc[len(CV_summary.index)] = [
+            'Mean +/- SEM', 
+            str(round(mse_mean.item(),4))+' +/- '+str(round(mse_std/np.sqrt(N_folds),4)), 
+            str(round(mae_mean.item(),4))+' +/- '+str(round(mae_std/np.sqrt(N_folds),4)),
+            str(round(pcc_mean.item(),4))+' +/- '+str(round(pcc_std/np.sqrt(N_folds),4)),
+            str(round(cs_mean.item(),4))+' +/- '+str(round(cs_std/np.sqrt(N_folds),4)),
+            str(round(kl_mean.item(),4))+' +/- '+str(round(kl_std/np.sqrt(N_folds),4)),
+            str(round(js_mean.item(),4))+' +/- '+str(round(js_std/np.sqrt(N_folds),4))
+            ]
+
+        ######################################################
+        ### Testing for an outlier in the Cross Validation ###
+        ######################################################
+        # 1) z-scores
+        from scipy.stats import zscore
+        mse_z, mae_z, pcc_z, cs_z, kl_z, js_z = zscore(mse), zscore(mae), zscore(pcc), zscore(cs), zscore(kl), zscore(js)
+        one_sigma = [ # % inside 1 sigma
+            np.sum((mse_z>-1)*(mse_z<1))/N_folds * 100,
+            np.sum((mae_z>-1)*(mae_z<1))/N_folds * 100,
+            np.sum((pcc_z>-1)*(pcc_z<1))/N_folds * 100,
+            np.sum((cs_z>-1)*(cs_z<1))/N_folds * 100,
+            np.sum((kl_z>-1)*(kl_z<1))/N_folds * 100,
+            np.sum((js_z>-1)*(js_z<1))/N_folds * 100
         ]
+        two_sigma = [ # % 2 sigmas
+            np.sum((mse_z>-2)*(mse_z<2))/N_folds * 100,
+            np.sum((mae_z>-2)*(mae_z<2))/N_folds * 100,
+            np.sum((pcc_z>-2)*(pcc_z<2))/N_folds * 100,
+            np.sum((cs_z>-2)*(cs_z<2))/N_folds * 100,
+            np.sum((kl_z>-2)*(kl_z<2))/N_folds * 100,
+            np.sum((js_z>-2)*(js_z<2))/N_folds * 100
+        ]
+        CV_summary.loc[len(CV_summary.index)] = ['1-sigma (%)', *one_sigma]
+        CV_summary.loc[len(CV_summary.index)] = ['2-sigma (%)', *two_sigma]
+        CV_summary.loc[len(CV_summary.index)] = [
+            'Z-score outlier', 
+            PAT_subjects[np.argmax(abs(mse_z))]+' z='+str(round(np.max(abs(mse_z)),4)), 
+            PAT_subjects[np.argmax(abs(mae_z))]+' z='+str(round(np.max(abs(mae_z)),4)), 
+            PAT_subjects[np.argmax(abs(pcc_z))]+' z='+str(round(np.max(abs(pcc_z)),4)), 
+            PAT_subjects[np.argmax(abs(cs_z))]+' z='+str(round(np.max(abs(cs_z)),4)),
+            PAT_subjects[np.argmax(abs(kl_z))]+' z='+str(round(np.max(abs(kl_z)),4)),
+            PAT_subjects[np.argmax(abs(js_z))]+' z='+str(round(np.max(abs(js_z)),4))
+            ]
+        
+        # 2) Grubb's test for outlier
+        from models.methods import grubbs_test
+        grubbs_results = ['Grubbs 2-sided']
+        h,p,out = grubbs_test(mse)
+        if h:
+            grubbs_results.append(PAT_subjects[out]+' p='+str(round(p,4)))
+        else:
+            grubbs_results.append('No outlier p='+str(round(p,4)))
+        h,p,out = grubbs_test(mae)
+        if h:
+            grubbs_results.append(PAT_subjects[out]+' p='+str(round(p,4)))
+        else:
+            grubbs_results.append('No outlier p='+str(round(p,4)))
+        h,p,out = grubbs_test(pcc)
+        if h:
+            grubbs_results.append(PAT_subjects[out]+' p='+str(round(p,4)))
+        else:
+            grubbs_results.append('No outlier p='+str(round(p,4)))
+        h,p,out = grubbs_test(cs)
+        if h:
+            grubbs_results.append(PAT_subjects[out]+' p='+str(round(p,4)))
+        else:
+            grubbs_results.append('No outlier p='+str(round(p,4)))
+        h,p,out = grubbs_test(kl)
+        if h:
+            grubbs_results.append(PAT_subjects[out]+' p='+str(round(p,4)))
+        else:
+            grubbs_results.append('No outlier p='+str(round(p,4)))
+        h,p,out = grubbs_test(js)
+        if h:
+            grubbs_results.append(PAT_subjects[out]+' p='+str(round(p,4)))
+        else:
+            grubbs_results.append('No outlier p='+str(round(p,4)))
+        CV_summary.loc[len(CV_summary.index)] = grubbs_results
 
-    # t-scores and counting inside 1,2,3 sigmas
-    t_bayes = (bayes - bayes_mean)/bayes_std_T
-    t_mae = (mae - mae_mean)/mae_std_T
-    t_pcc = (pcc - pcc_mean)/pcc_std_T
-    t_cs = (cs - cs_mean)/cs_std_T
-    one_sigma = [torch.sum((t_bayes<(bayes_mean+bayes_std_T).item())*(t_bayes<(bayes_mean+bayes_std_T).item()))]
-    print('testing stuff')
+        # 3) Cyclical T-/Wilcoxon-test 
+        from scipy.stats import ttest_1samp, wilcoxon
+        p_ttest, p_wtest = np.zeros((N_folds,6)), np.zeros((N_folds,6))
+        for sub in range(N_folds):
+            sample_mse, pop_mse = np.delete(np.copy(mse), sub), mse[sub]
+            sample_mae, pop_mae = np.delete(np.copy(mae), sub), mae[sub]
+            sample_pcc, pop_pcc = np.delete(np.copy(pcc), sub), pcc[sub]
+            sample_cs, pop_cs = np.delete(np.copy(cs), sub), cs[sub]
+            sample_kl, pop_kl = np.delete(np.copy(kl), sub), kl[sub]
+            sample_js, pop_js = np.delete(np.copy(js), sub), js[sub]
+
+            # 1-sample 2-sided T test
+            _, pt_mse = ttest_1samp(sample_mse, pop_mse)
+            _, pt_mae = ttest_1samp(sample_mae, pop_mae)
+            _, pt_pcc = ttest_1samp(sample_pcc, pop_pcc)
+            _, pt_cs = ttest_1samp(sample_cs, pop_cs)
+            _, pt_kl = ttest_1samp(sample_kl, pop_kl)
+            _, pt_js = ttest_1samp(sample_js, pop_js)
+            # 1-sample 2-sided Wilcoxon test
+            _, pw_mse = wilcoxon(sample_mse-pop_mse)
+            _, pw_mae = wilcoxon(sample_mae-pop_mae)
+            _, pw_pcc = wilcoxon(sample_pcc-pop_pcc)
+            _, pw_cs = wilcoxon(sample_cs-pop_cs)
+            _, pw_kl = wilcoxon(sample_kl-pop_kl)
+            _, pw_js = wilcoxon(sample_js-pop_js)
+            CV_summary.loc[len(CV_summary.index)] = [
+                PAT_subjects[sub]+' T/W-test',
+                'pt='+str(round(pt_mse,4))+' pw='+str(round(pw_mse,4)),
+                'pt='+str(round(pt_mae,4))+' pw='+str(round(pw_mae,4)),
+                'pt='+str(round(pt_pcc,4))+' pw='+str(round(pw_pcc,4)),
+                'pt='+str(round(pt_cs,4))+' pw='+str(round(pw_cs,4)),
+                'pt='+str(round(pt_kl,4))+' pw='+str(round(pw_kl,4)),
+                'pt='+str(round(pt_js,4))+' pw='+str(round(pw_js,4))
+                ]
+            p_ttest[sub,:] = np.array([pt_mse, pt_mae, pt_pcc, pt_cs, pt_kl, pt_js], dtype=np.float64)
+            p_wtest[sub,:] = np.array([pw_mse, pw_mae, pw_pcc, pw_cs, pw_kl, pw_js], dtype=np.float64)
+        print('testing stuff')
+        
+    # TODO: 
+    # 1 - Check Grubb's test - OK
+    # 2 - T-test on permutation of the folds - OK
+    # 3 - Wilcoxon Signed Rank test on permutation of the folds - OK
+    # 4 - Do these two/three figures
+    # 5 - Degree distribution + KD/JS divergenge
+    # 6 - Meningioma vs glioma reconstruction
+    # 7 - Think figures for 5, 6
+    # 8 - Null prediction models
+    # 9 - Testing agains null models
 
     # To average the models #
     # https://discuss.pytorch.org/t/average-each-weight-of-two-models/77008

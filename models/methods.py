@@ -5,6 +5,8 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 import wandb
 import warnings
+import numpy as np
+from scipy.stats import t as t_dist
 
 from models.networks import LinearRegres, NonLinearRegres
 from models.metrics import BayesianWeightedLoss
@@ -137,6 +139,38 @@ def return_specs(args, prior=None):
         raise ValueError("Optimizer not implemented")
 
     return regres, loss, sgd
+
+def grubbs_test(x, alpha=0.05):
+    """
+    Uses two-tailed Grubb's test to check if the maximum value of the data is an outlier. 
+    Refs: [1] https://support.minitab.com/en-us/minitab/20/help-and-how-to/statistics/basic-statistics/how-to/outlier-test/methods-and-formulas/methods-and-formulas/#p-values-for-grubbs-test-statistic
+          [2] https://www.originlab.com/doc/origin-help/grubbs-test-dialog
+          [3] https://en.wikipedia.org/wiki/Grubbs%27s_test
+    Inputs:
+        x: data (numpy array)
+        alpha: (optional) significance for the test
+    Returns:
+        h: if there is an outlier (bool)
+        p: p-value of the test (float)
+        arg_outlier: if h is True, index of the outlier (int)
+    """
+    # Two-tailed Grubbs statistic
+    n, mean_x, sd_x = len(x), np.mean(x), np.std(x)
+    g_calculated = max(abs(x-mean_x))/sd_x
+    # Two-tailed Grubbs critical value
+    t_value = t_dist.ppf(1 - alpha / (2 * n), n - 2)
+    g_critical = ((n - 1) * np.sqrt(np.square(t_value))) / (np.sqrt(n) * np.sqrt(n - 2 + np.square(t_value)))
+    # p-value: Ref [1]
+    t_stat = np.sqrt(n*(n-2)*(g_calculated**2))/np.sqrt((n-1)**2 - n*(g_calculated**2))
+    p = 2*n*(1 - t_dist.cdf(t_stat, n - 2)) 
+    # Outlier
+    if g_critical > g_calculated:
+        h = False
+        arg_outlier = None
+    else:
+        h = True
+        arg_outlier = np.argmax(abs(x-mean_x))
+    return h, p, arg_outlier
 
 if __name__ == '__main__':
     pass

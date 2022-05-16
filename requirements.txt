@@ -7,6 +7,9 @@ pyyaml
 seaborn
 wandb
 tqdm
+networkx
 
 ### Then run the following command ###
 # conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+### or if you don't have cuda ###
+# conda install pytorch torchvision torchaudio -c pytorch

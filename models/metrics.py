@@ -1,8 +1,12 @@
 import numpy as np
+import networkx as nx
 import torch
 import torch.nn as nn
 import matplotlib.pylab as plt
 import seaborn as sns
+from scipy.spatial.distance import jensenshannon
+
+from utils.data import unflatten_data
 
 class BayesianWeightedLoss(nn.Module):
     def __init__(self, anat_prior):
@@ -61,6 +65,53 @@ class CosineSimilarity(nn.Module):
         mean_cs = torch.mean(cs)
         std_cs = torch.std(cs)
         return cs, mean_cs, std_cs
+
+class Degree(nn.Module):
+    def __init__(self, flattened, rois):
+        adjs = np.array(unflatten_data(flattened, rois=rois, norm=False), dtype=np.float64)
+        self.rois = rois
+        self.Gs = []
+        for i in range(adjs.shape[0]):
+            self.Gs.append(nx.from_numpy_array(adjs[i]))
+        return self.__degree(), self.__distribution()
+
+    def __degree(self): 
+        """
+        Returns the degree of all the nodes in all the graphs.
+        """
+        self.degrees_list = list()
+        for i in range(len(self.Gs)):
+            self.degrees_list.append(self.Gs[i].degree())            
+        return self.degrees_list # Each entry of the list is the degree of each node (node, degree)
+
+    def __distribution(self):
+        """
+        Returns a density distribution of the degree in all the graphs
+        """
+        self.degree_probs = []
+        for i in range(len(self.Gs)):
+            probs = (np.bincount([jj for _,jj in self.Gs[i].degree()])/self.rois)
+            dgs = np.arange(0, max(np.unique([jj for _,jj in self.Gs[i].degree()]))+1)
+            self.degree_probs.append(np.vstack((dgs, probs)))
+        return self.degree_probs
+
+def KL_JS_divergences(input, target, rois, eps=1e-8):
+    """ Computes the KL and JS Divergences between two degree distributions.
+    Input:
+        input: degree distribution of the input graph
+        target: degree distribution of the target graph
+        rois: number of nodes in the graph (to be used in the degree computation)
+        eps: float to avoid log(0)
+    Output:
+        KL: divergence (torch scalar) 
+        JS: divergence (torch scalar)
+    """
+
+    input_degree = Degree(input, rois=rois)[0][-1,:]
+    target_degree = Degree(target, rois=rois)[0][-1,:]
+    kl = np.sum(target_degree*np.log(target_degree+eps) - target_degree*np.log(input_degree+eps))
+    js = jensenshannon(input_degree, target_degree)
+    return kl, js 
 
 def euclidean_distance(pred, real):
     """ Computes the Euclidean Distance between a predicted and real graph. 

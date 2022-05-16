@@ -73,7 +73,8 @@ class Degree(nn.Module):
         self.Gs = []
         for i in range(adjs.shape[0]):
             self.Gs.append(nx.from_numpy_array(adjs[i]))
-        return self.__degree(), self.__distribution()
+        self.__degree() 
+        self.__distribution()
 
     def __degree(self): 
         """
@@ -95,6 +96,29 @@ class Degree(nn.Module):
             self.degree_probs.append(np.vstack((dgs, probs)))
         return self.degree_probs
 
+def degree_distribution(flattened, rois, maximum_degree=200, d_dg=1.):
+    """
+    Returns the probability distribution and the degrees in the graph. 
+    Inputs:
+        flattened: flattened graph
+        rois: number of nodes
+        maximum_degree: (int) maximum degree to which spans the probability
+        d_dg: degree interval upon which the probability refers to (float)
+    Outputs:
+        prob: probability distribution of each degree in the network (numpy array)
+        dgs: degrees present in the network until maximum_degree
+    """
+    degree_prob = np.zeros((int(maximum_degree//d_dg),))
+    dgs = np.arange(0, maximum_degree+1)
+    adj = np.array(unflatten_data(flattened, rois=rois, norm=False)[0], dtype=np.float64)
+    D_G = [jj for _,jj in nx.from_numpy_array(adj).degree(weight='weight')]
+    #probs = (np.bincount([jj for _,jj in D_G])/rois)
+    #dgs = np.unique([jj for _,jj in D_G])
+    for d in range(maximum_degree):
+        d_inf, d_sup = dgs[d], dgs[d+1]
+        degree_prob[d] = np.sum((D_G>d_inf)*(D_G<d_sup))
+    return degree_prob, dgs
+
 def KL_JS_divergences(input, target, rois, eps=1e-8):
     """ Computes the KL and JS Divergences between two degree distributions.
     Input:
@@ -107,8 +131,8 @@ def KL_JS_divergences(input, target, rois, eps=1e-8):
         JS: divergence (torch scalar)
     """
 
-    input_degree = Degree(input, rois=rois)[0][-1,:]
-    target_degree = Degree(target, rois=rois)[0][-1,:]
+    input_degree, _ = degree_distribution(input, rois)
+    target_degree, _ = degree_distribution(target, rois)
     kl = np.sum(target_degree*np.log(target_degree+eps) - target_degree*np.log(input_degree+eps))
     js = jensenshannon(input_degree, target_degree)
     return kl, js 

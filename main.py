@@ -18,7 +18,7 @@ from utils.paths import get_subjects, get_info
 
 parser = argparse.ArgumentParser()
 # General settings
-parser.add_argument('--mode', type=str, default='stats', choices=['train', 'stats'], help="Train the model or just report statistics")
+parser.add_argument('--mode', type=str, default='train', choices=['train', 'stats'], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
 parser.add_argument('-M', '--model', type=str, default='model', help="Trained model name")

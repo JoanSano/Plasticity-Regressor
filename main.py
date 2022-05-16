@@ -8,6 +8,8 @@ from sklearn.model_selection import LeaveOneOut
 from pathlib import Path
 import pandas as pd
 import json
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from models.methods import Model, return_specs
 from models.networks import LinearRegres, NonLinearRegres
@@ -18,7 +20,7 @@ from utils.paths import get_subjects, get_info
 
 parser = argparse.ArgumentParser()
 # General settings
-parser.add_argument('--mode', type=str, default='train', choices=['train', 'stats'], help="Train the model or just report statistics")
+parser.add_argument('--mode', type=str, default='stats', choices=['train', 'stats'], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
 parser.add_argument('-M', '--model', type=str, default='model', help="Trained model name")
@@ -42,8 +44,9 @@ parser.add_argument('-RE', '--regressor', type=str, default='linear', choices=['
 parser.add_argument('-L', '--loss', type=str, default='bayes_mse', choices=['bayes_mse', 'huber'], help="Reconstruction loss")
 args = parser.parse_args()
 
-with open('command_log.txt', 'w') as f:
-    json.dump(args.__dict__, f, indent=2)
+if args.mode != 'stats':
+    with open('command_log.txt', 'w') as f:
+        json.dump(args.__dict__, f, indent=2)
 
 if __name__ == '__main__':
     if args.device == 'cuda':
@@ -55,11 +58,11 @@ if __name__ == '__main__':
     # Relevant paths
     folder = args.folder+'_'+args.model+'/'
     check_path(folder)
-    graph_path = check_path(folder+'csv/')
-    png_path = check_path(folder+'png/')
-    flat_path = check_path(folder+'flat/')
-    metrics_csv_path = check_path(folder+'metrics/numerical/')
-    metrics_fig_path = check_path(folder+'metrics/figures/')
+    #graph_path = check_path(folder+'csv/')
+    png_path = check_path(folder+'figures/')
+    #flat_path = check_path(folder+'flat/')
+    #metrics_csv_path = check_path(folder+'metrics/numerical/')
+    #metrics_fig_path = check_path(folder+'metrics/figures/')
 
     # Preparing data
     (CONTROL, CON_subjects), (data, PAT_subjects), (PAT_1session, PAT_1session_subjects) = prepare_data(
@@ -81,6 +84,10 @@ if __name__ == '__main__':
     N_folds = CV.get_n_splits(data[0])
 
     if args.mode == 'train':
+        ################
+        ### Training ###
+        ################
+         
         # Results
         CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity', 'KL_Div', 'JS_Div'])
         final_regres, _, _ = return_specs(args, prior=prior)
@@ -265,16 +272,25 @@ if __name__ == '__main__':
                 ]
             p_ttest[sub,:] = np.array([pt_mse, pt_mae, pt_pcc, pt_cs, pt_kl, pt_js], dtype=np.float64)
             p_wtest[sub,:] = np.array([pw_mse, pw_mae, pw_pcc, pw_cs, pw_kl, pw_js], dtype=np.float64)
-        print('testing stuff')
         
+        CV_summary.to_csv(folder+args.model+'_stats.tsv', sep='\t', index=False)
+
+        ###############
+        ### Figures ###
+        ###############
+        from figures import *
+
+        # 1) Box plot for z-scores of the 19 folds
+        boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
+
     # TODO: 
     # 1 - Check Grubb's test - OK
     # 2 - T-test on permutation of the folds - OK
     # 3 - Wilcoxon Signed Rank test on permutation of the folds - OK
     # 4 - Do these two/three figures
-    # 5 - Degree distribution + KD/JS divergenge
-    # 6 - Meningioma vs glioma reconstruction
-    # 7 - Think figures for 5, 6
+    # 5 - Degree distribution + KD/JS divergenge - OK
+    # 6 - Think figures for 5
+    # 7 - Meningioma vs glioma reconstruction
     # 8 - Null prediction models
     # 9 - Testing agains null models
 

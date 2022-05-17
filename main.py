@@ -11,9 +11,9 @@ import json
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from models.methods import Model, return_specs
+from models.methods import Model, return_specs, to_array
 from models.networks import LinearRegres, NonLinearRegres
-from models.metrics import euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity, KL_JS_divergences
+from models.metrics import degree_distribution, euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity, KL_JS_divergences
 from utils.data import check_path, graph_dumper, two_session_graph_loader, prepare_data
 from utils.graphs import GraphFromCSV, create_anat_prior, load_anat_prior
 from utils.paths import get_subjects, get_info
@@ -90,6 +90,7 @@ if __name__ == '__main__':
 
         # Results
         CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity', 'KL_Div', 'JS_Div'])
+        Degree = pd.DataFrame(columns=['Subject', 'Predicted', 'Ground Truth', 'Degrees'])
         final_regres, _, _ = return_specs(args, prior=prior)
         final_model = final_regres.state_dict()
 
@@ -118,6 +119,8 @@ if __name__ == '__main__':
             _, cs, _ = CosineSimilarity().forward(pred_LOO, target_test)
             kl_div, js_div = KL_JS_divergences(pred_LOO, target_test, rois=args.rois)
             CV_summary.loc[len(CV_summary.index)] = [subject, test_mse.item(), test_mae.item(), pcc.item(), cs.item(), kl_div.item(), js_div.item()]
+            dist, dgs = degree_distribution(pred_LOO, args.rois)[0]
+            Degree.loc[len(Degree.index)] = [subject, dist, degree_distribution(target_test, args.rois)[0], dgs]
 
             # Creating the final model
             for key in final_model.keys():
@@ -132,6 +135,7 @@ if __name__ == '__main__':
 
         # Saving performance evaluation
         CV_summary.to_csv(folder+args.model+'_LOO-testing.tsv', sep='\t', index=False)
+        Degree.to_csv(folder+args.model+'_degree_distribution.tsv', sep='\t', index=False)
 
         # TODO: Save the 1-fold predictions (flattened, unshuffled) + the connectivity matrice? (add deleted rois)
 
@@ -150,6 +154,17 @@ if __name__ == '__main__':
         kl = np.array(CV_summary['KL_Div'], dtype=np.float64)
         js = np.array(CV_summary['JS_Div'], dtype=np.float64)
         N_folds = len(PAT_subjects)
+
+        # Loading patient information and REORDERING in the same way as CV_summary!!!
+        info = pd.read_csv('data/participants.tsv', sep='\t')
+        info = info[info["participant_id"].str.contains("CON") == False]
+        info.set_index(info.participant_id, inplace=True)
+        info.drop(['participant_id'], axis=1, inplace=True)
+        info.index.name = None
+        tumor_sizes = {k: dict(info["tumor size (cub cm)"])[k] for k in PAT_subjects}
+        tumor_types = {k: dict(info["tumor type & grade"])[k] for k in PAT_subjects}
+        tumor_locs = {k: dict(info["tumor location"])[k] for k in PAT_subjects}
+        # Acces data by converting to list and to numpy array np.array(list(values), dtype)
 
         #################################################################################################
         ### Mean and Standard Error of the Mean of the current model and metric ==> E +/- STD/SQRT(N) ###
@@ -282,12 +297,35 @@ if __name__ == '__main__':
         ###############
         ### Figures ###
         ###############
-        from utils.figures import boxplot, normality_plots
+        from utils.figures import *
 
         # 1) Box plot for z-scores of the 19 folds
-        boxplot(figs_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
+        #boxplot(figs_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
         # 2) Normality plot for all metrics
-        normality_plots(figs_path, mse, mae, pcc, cs, kl, js, args, PAT_subjects)
+        #normality_plots(figs_path, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, args, PAT_subjects)
+
+        
+        # Correlations between metrics
+        correlations = np.array([
+            pearsonr(mse_z, mae_z)[0], pearsonr(mse_z, pcc_z)[0], pearsonr(mse_z, cs_z)[0], pearsonr(mae_z, pcc_z)[0], pearsonr(mae_z, cs_z)[0], pearsonr(pcc_z, cs_z)[0]
+        ])
+        print("Correlations between metrics:")
+        print("MSE-MAE: r = ",correlations[0])
+        print("MSE-PCC: r = ",correlations[1])
+        print("MSE-CS: r = ",correlations[2])
+        print("MAE-PCC: r = ",correlations[3])
+        print("MAE-CS: r = ",correlations[4])
+        print("PCC-CS: r = ",correlations[5])
+        print("=====================================")
+
+        # 3) Checking for the effect of tumor size
+        size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects)
+
+        # 4) Checking for the effect of tumor type
+        type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects)
+
+        # 5) Checking for the effect of tumor location
+        location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects)
 
     # TODO: 
     # 1 - Check Grubb's test - OK

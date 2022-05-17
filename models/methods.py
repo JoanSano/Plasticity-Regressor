@@ -172,5 +172,19 @@ def grubbs_test(x, alpha=0.05):
         arg_outlier = np.argmax(abs(x-mean_x))
     return h, p, arg_outlier
 
+def f_test(x, y):
+    """
+    Two-sided F-test for variance of two samples
+    """
+    from scipy.stats import f as F
+    f = np.var(x)/np.var(y)
+    nun = len(x)-1
+    dun = len(y)-1
+    p_value = 1-F.cdf(f, nun, dun)
+    return f, p_value
+
+def to_array(dict, dtype=np.float64):
+    return np.array(list(dict.values()), dtype=dtype)
+
 if __name__ == '__main__':
     pass

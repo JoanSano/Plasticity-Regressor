@@ -44,50 +44,50 @@ parser.add_argument('-RE', '--regressor', type=str, default='linear', choices=['
 parser.add_argument('-L', '--loss', type=str, default='bayes_mse', choices=['bayes_mse', 'huber'], help="Reconstruction loss")
 args = parser.parse_args()
 
-if args.mode != 'stats':
-    with open('command_log.txt', 'w') as f:
-        json.dump(args.__dict__, f, indent=2)
 
 if __name__ == '__main__':
     if args.device == 'cuda':
         args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
     else: 
         args.device = 'cpu'
-    print("Code running on", args.device)
 
     # Relevant paths
     folder = args.folder+'_'+args.model+'/'
     check_path(folder)
     #graph_path = check_path(folder+'csv/')
-    png_path = check_path(folder+'figures/')
+    figs_path = check_path(folder+'figures/')
     #flat_path = check_path(folder+'flat/')
     #metrics_csv_path = check_path(folder+'metrics/numerical/')
     #metrics_fig_path = check_path(folder+'metrics/figures/')
-
-    # Preparing data
-    (CONTROL, CON_subjects), (data, PAT_subjects), (PAT_1session, PAT_1session_subjects) = prepare_data(
-    'data/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=[35,36,81,82]
-    )
     
-    # Creating or loading priors
-    # TODO: Improve the prior generation (maybe?) 
-    if args.prior:
-        prior, mean_connections = load_anat_prior('data/')
-    else:
-        prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True)
-        sg = GraphFromCSV('data/prior.csv', 'prior', 'data/', rois=args.rois)
-        sg.unflatten_graph(to_default=True, save_flat=True)
-        sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
-
-    # Cross-Validation
-    CV = LeaveOneOut()
-    N_folds = CV.get_n_splits(data[0])
-
     if args.mode == 'train':
+        with open(folder+'command_log.txt', 'w') as f:
+            json.dump(args.__dict__, f, indent=2)
+
+        # Preparing data
+        (CONTROL, CON_subjects), (data, PAT_subjects), (PAT_1session, PAT_1session_subjects) = prepare_data(
+        'data/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=[35,36,81,82]
+        )
+        
+        # Creating or loading priors
+        # TODO: Improve the prior generation (maybe?) 
+        if args.prior:
+            prior, mean_connections = load_anat_prior('data/')
+        else:
+            prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True)
+            sg = GraphFromCSV('data/prior.csv', 'prior', 'data/', rois=args.rois)
+            sg.unflatten_graph(to_default=True, save_flat=True)
+            sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
+
+        # Cross-Validation
+        CV = LeaveOneOut()
+        N_folds = CV.get_n_splits(data[0])
+
         ################
         ### Training ###
         ################
-         
+        print("Training using", args.device)
+
         # Results
         CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity', 'KL_Div', 'JS_Div'])
         final_regres, _, _ = return_specs(args, prior=prior)
@@ -133,6 +133,8 @@ if __name__ == '__main__':
         # Saving performance evaluation
         CV_summary.to_csv(folder+args.model+'_LOO-testing.tsv', sep='\t', index=False)
 
+        # TODO: Save the 1-fold predictions (flattened, unshuffled) + the connectivity matrice? (add deleted rois)
+
     if args.mode == 'stats':
         try:
             CV_summary = pd.read_csv(folder+args.model+'_LOO-testing.tsv', sep='\t')
@@ -147,6 +149,7 @@ if __name__ == '__main__':
         cs = np.array(CV_summary['CosineSimilarity'], dtype=np.float64)
         kl = np.array(CV_summary['KL_Div'], dtype=np.float64)
         js = np.array(CV_summary['JS_Div'], dtype=np.float64)
+        N_folds = len(PAT_subjects)
 
         #################################################################################################
         ### Mean and Standard Error of the Mean of the current model and metric ==> E +/- STD/SQRT(N) ###
@@ -261,6 +264,7 @@ if __name__ == '__main__':
             _, pw_cs = wilcoxon(sample_cs-pop_cs)
             _, pw_kl = wilcoxon(sample_kl-pop_kl)
             _, pw_js = wilcoxon(sample_js-pop_js)
+
             CV_summary.loc[len(CV_summary.index)] = [
                 PAT_subjects[sub]+' T/W-test',
                 'pt='+str(round(pt_mse,4))+' pw='+str(round(pw_mse,4)),
@@ -278,10 +282,12 @@ if __name__ == '__main__':
         ###############
         ### Figures ###
         ###############
-        from figures import *
+        from utils.figures import boxplot, normality_plots
 
         # 1) Box plot for z-scores of the 19 folds
-        boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
+        boxplot(figs_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
+        # 2) Normality plot for all metrics
+        normality_plots(figs_path, mse, mae, pcc, cs, kl, js, args, PAT_subjects)
 
     # TODO: 
     # 1 - Check Grubb's test - OK

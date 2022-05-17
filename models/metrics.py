@@ -66,36 +66,6 @@ class CosineSimilarity(nn.Module):
         std_cs = torch.std(cs)
         return cs, mean_cs, std_cs
 
-class Degree(nn.Module):
-    def __init__(self, flattened, rois):
-        adjs = np.array(unflatten_data(flattened, rois=rois, norm=False), dtype=np.float64)
-        self.rois = rois
-        self.Gs = []
-        for i in range(adjs.shape[0]):
-            self.Gs.append(nx.from_numpy_array(adjs[i]))
-        self.__degree() 
-        self.__distribution()
-
-    def __degree(self): 
-        """
-        Returns the degree of all the nodes in all the graphs.
-        """
-        self.degrees_list = list()
-        for i in range(len(self.Gs)):
-            self.degrees_list.append(self.Gs[i].degree())            
-        return self.degrees_list # Each entry of the list is the degree of each node (node, degree)
-
-    def __distribution(self):
-        """
-        Returns a density distribution of the degree in all the graphs
-        """
-        self.degree_probs = []
-        for i in range(len(self.Gs)):
-            probs = (np.bincount([jj for _,jj in self.Gs[i].degree()])/self.rois)
-            dgs = np.arange(0, max(np.unique([jj for _,jj in self.Gs[i].degree()]))+1)
-            self.degree_probs.append(np.vstack((dgs, probs)))
-        return self.degree_probs
-
 def degree_distribution(flattened, rois, maximum_degree=200, d_dg=1.):
     """
     Returns the probability distribution and the degrees in the graph. 

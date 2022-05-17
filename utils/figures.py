@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pylab as plt
-
+from scipy.stats import probplot
 
 def boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects):
     subject_to_follow_max = np.argmax(mse) # Highest zscore of reconstruction error
@@ -32,3 +32,23 @@ def boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subj
     plt.legend(loc=9, frameon=True, fontsize=10, ncol=2, bbox_to_anchor=(0.5,1.1))
     plt.savefig(png_path+args.model+'_boxplot.png', dpi=900)
     plt.savefig(png_path+args.model+'_boxplot.eps', dpi=900)
+
+def normality_plots(png_path, mse, mae, pcc, cs, kl, js, args, PAT_subjects):
+    fig, ax = plt.subplots(figsize=(6,4))
+    norm_mse, fit_mse = probplot(mse)
+    norm_mae, fit_mae = probplot(mae)
+    norm_pcc, fit_pcc = probplot(pcc)
+    norm_cs, fit_cs = probplot(cs)
+    norm_kl, fit_kl = probplot(kl)
+    norm_js, fit_js = probplot(js)
+    
+    ax.scatter(norm_mse[0], norm_mse[1], s=15, label='MSE')
+    ax.scatter(norm_mae[0], norm_mae[1], s=15, label='MAE')
+    ax.scatter(norm_pcc[0], norm_pcc[1], s=15, label='PCC')
+    ax.scatter(norm_cs[0], norm_cs[1], s=15, label='CS')
+    ax.scatter(norm_kl[0], norm_kl[1], s=15, label='KL')
+    ax.scatter(norm_js[0], norm_js[1], s=15, label='JS')
+    
+    ax.set_title(""), ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
+    plt.savefig(png_path+args.model+'_norm_mse.png', dpi=900)
+    plt.savefig(png_path+args.model+'_norm_mse.eps', dpi=900)

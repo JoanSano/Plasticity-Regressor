@@ -9,10 +9,15 @@ from scipy.spatial.distance import jensenshannon
 from utils.data import unflatten_data
 
 class BayesianWeightedLoss(nn.Module):
-    def __init__(self, anat_prior):
+    def __init__(self, anat_prior, type='mse'):
         super().__init__()
         self.prior = anat_prior
-        self.mse = nn.MSELoss()
+        if type == 'mse':
+            self.loss = nn.MSELoss()
+        elif type == 'huber':
+            self.loss = nn.HuberLoss()
+        else:
+            raise ValueError('Loss function not implemented')
 
     def forward(self, output, target):
         # This loss function can be tweeked to include topological features, cosine similarity
@@ -20,7 +25,7 @@ class BayesianWeightedLoss(nn.Module):
         posterior = output * 0
         for t in range(output.shape[0]):
             posterior[t] = torch.mul(output[t], self.prior)
-        return self.mse(posterior, target) 
+        return self.loss(posterior, target) 
 
 class PCC(nn.Module):
     def __init__(self, dim=1):

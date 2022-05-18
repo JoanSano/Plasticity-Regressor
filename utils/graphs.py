@@ -9,6 +9,9 @@ from .paths import get_info, get_subjects, check_path
 
 class GraphFromTensor:
     def __init__(self, graph, name, base_dir='', rois=170):
+        """
+        WARNING: If you pass a flat graph be sure that the size is [1,Features] !!
+        """
         self.features = int(rois*(rois-1)/2)
         self.conns = np.array(graph)  # Connections
         self.graph_size = self.conns.shape
@@ -143,7 +146,7 @@ class GraphFromTensor:
                 # We replace the original file with the unflattend graph
                 np.savetxt(self.graph, self.unflat_conns, delimiter=',')
                 # We re-initialize the graph with the unflattened graph and both the same name and directory
-                self.__init__(self.graph, self.name, self.dir)
+                self.__init__(self.unflat_conns, self.name, self.dir)
             return self.unflat_conns
 
     def save(self):

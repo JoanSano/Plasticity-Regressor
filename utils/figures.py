@@ -73,12 +73,16 @@ def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects, alpha
     #################################
     ### Correlation size vs error ###
     #################################
+    from models.methods import grubbs_test
 
     tm_size = to_array(tumor_sizes)
     # Dropping 3 biggest
     tm_3drop = tm_size[tm_size.argsort()[:-3][::-1]]
     mae_3drop = mae[tm_size.argsort()[:-3][::-1]]
     pcc_3drop = pcc[tm_size.argsort()[:-3][::-1]]
+    _, p_grub_large,_ = grubbs_test(np.concatenate((tm_3drop, [np.mean(tm_size[tm_size.argsort()[-3:][::-1]])]), axis=0))
+    print("Mean of the 3 largest tumor is outlier with p = {:.4}".format(p_grub_large))
+    print("=============================")
     # Dropping 4 biggest
     tm_4drop = tm_size[tm_size.argsort()[:-4][::-1]]
     mae_4drop = mae[tm_size.argsort()[:-4][::-1]]

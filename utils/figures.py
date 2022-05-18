@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pylab as plt
-from scipy.stats import probplot, pearsonr, permutation_test, ttest_ind, mannwhitneyu, kruskal
+from scipy.stats import probplot, pearsonr, permutation_test, ttest_ind, mannwhitneyu, f_oneway, kruskal
+
+from models.methods import f_test, to_array
 
 def boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects):
     subject_to_follow_max = np.argmax(mse) # Highest zscore of reconstruction error
@@ -67,9 +69,7 @@ def normality_plots(png_path, mse, mae, pcc, cs, kl, js, args, PAT_subjects):
     print("JS: r = ",fit_js[2])
     print("=====================================")
 
-def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects):
-    from models.methods import to_array
-
+def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects, alpha=0.05):
     #################################
     ### Correlation size vs error ###
     #################################
@@ -126,9 +126,52 @@ def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects):
     #################################
     ### Tumor size between groups ###
     #################################
+    # Dividing metrics percentiles of the tumor size 
+    small = np.array([j for j,i in zip(pcc,tm_size) if i<np.percentile(tm_size,50)])
+    large = np.array([j for j,i in zip(pcc,tm_size) if i>np.percentile(tm_size,50)])
+    mean_small, std_small = np.mean(small), np.std(small)/np.sqrt(small.shape[0])
+    mean_large, std_large = np.mean(large), np.std(large)/np.sqrt(large.shape[0])
+    _, p_var = f_test(small, large)
+    eq_var = True if p_var>alpha else False
+    _, pT = ttest_ind(small, large, equal_var=eq_var, alternative='greater')
+    _, pU = mannwhitneyu(small, large, alternative='greater')
+    print("One-sided differences in PCC between 2 tumor size groups (splitted by P50):")
+    print("Small group: mean = {:.4f} +/- std = {:.4f}".format(mean_small, std_small))
+    print("Large group: mean = {:.4f} +/- std = {:.4f}".format(mean_large, std_large))
+    print("T-test p = {:.4f}".format(pT))
+    print("U-test p = {:.4f}".format(pU))
+    print("=============================")
+
+    fig, ax = plt.subplots(figsize=(5,4))
+    ax.bar([1,2], [mean_small, mean_large], 
+        yerr=[std_small, std_large],linewidth=2,
+        color=[0,0,1,0.5],edgecolor=[0,0,0,1],error_kw=dict(lw=2),
+        ecolor='k', capsize=15, width=0.75, align='center'
+    )
+
+    ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
+    ax.set_ylim([0.84,0.9]), ax.set_yticks([0.84,0.86,0.88,0.9]), ax.set_yticklabels(['0.84','0.86','0.88','0.90'])
+    ax.set_xticklabels(['Size<'+str(np.percentile(tm_size,50))+'cm$^3$','Size>'+str(np.percentile(tm_size,50))+'cm$^3$'])
+    ax.set_xticks([1,2]), ax.set_ylabel('PCC')
+    plt.savefig(figs_path+args.model+'_tumor-size.png', dpi=900)
+    plt.savefig(figs_path+args.model+'_tumor-size.eps', dpi=900)
+
+    groups = [
+        np.array([j for j,i in zip(pcc,tm_size) if i<=np.percentile(tm_size,33)]),
+        np.array([j for j,i in zip(pcc,tm_size) if i>np.percentile(tm_size,33) and i<=np.percentile(tm_size,67)]),
+        np.array([j for j,i in zip(pcc,tm_size) if i>np.percentile(tm_size,67)])
+    ]
+    _, pA = f_oneway(*groups)
+    _, pKW = kruskal(*groups)
+    print("Differences in PCC between 3 tumor size groups (splitted by P33-66):")
+    print("Small group: mean = {:.4f} +/- std = {:.4f}".format(np.mean(groups[0]), np.std(groups[0])/np.sqrt(groups[0].shape[0])))
+    print("Medium group: mean = {:.4f} +/- std = {:.4f}".format(np.mean(groups[1]), np.std(groups[1])/np.sqrt(groups[1].shape[0])))
+    print("Large group: mean = {:.4f} +/- std = {:.4f}".format(np.mean(groups[2]), np.std(groups[2]/np.sqrt(groups[2].shape[0]))))
+    print("ANOVA p = {:.4f}".format(pA))
+    print("KRUSKAL-WALLIS p = {:.4f}".format(pKW))
+    print("=============================")
 
 def type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects, alpha=0.05):
-    from models.methods import f_test
     meningioma, glioma = [] , []
     for s in range(len(PAT_subjects)):
         if 'gioma' in tumor_types[PAT_subjects[s]]:
@@ -161,8 +204,8 @@ def type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects, alpha=0.0
     print("PCC two-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_T, p_pcc_T/2))
     print("MAE two-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_T, p_mae_T/2))
     print("Differences between tumor types, Mann-Whitney:")
-    print("PCC one-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_U, p_pcc_U/2))
-    print("MAE one-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_U, p_mae_U/2))
+    print("PCC two-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_U, p_pcc_U/2))
+    print("MAE two-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_U, p_mae_U/2))
     print("=============================")
 
     fig, ax = plt.subplots(figsize=(5,4))
@@ -173,13 +216,12 @@ def type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects, alpha=0.0
     )
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
-    ax.set_ylim([0.855,0.885]), ax.set_yticks([0.86,0.87,0.88]), ax.set_yticklabels(['0.86','0.87','0.88'])
+    ax.set_ylim([0.85,0.89]), ax.set_yticks([0.85,0.86,0.87,0.88,0.89]), ax.set_yticklabels(['0.85','0.86','0.87','0.88','0.89'])
     ax.set_xticks([1,2]), ax.set_xticklabels(['Meningioma', 'Glioma']), ax.set_ylabel('PCC')
     plt.savefig(figs_path+args.model+'_tumor-type.png', dpi=900)
     plt.savefig(figs_path+args.model+'_tumor-type.eps', dpi=900)
 
 def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=0.05):
-    from models.methods import f_test
     frontal, other = [] , []
     for s in range(len(PAT_subjects)):
         if 'frontal' in tumor_locs[PAT_subjects[s]].lower():
@@ -224,7 +266,7 @@ def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=
     )
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
-    ax.set_ylim([0.855,0.885]), ax.set_yticks([0.86,0.87,0.88]), ax.set_yticklabels(['0.86','0.87','0.88'])
+    ax.set_ylim([0.85,0.89]), ax.set_yticks([0.85,0.86,0.87,0.88,0.89]), ax.set_yticklabels(['0.85','0.86','0.87','0.88','0.89'])
     ax.set_xticks([1,2]), ax.set_xticklabels(['Frontal', 'Other']), ax.set_ylabel('PCC')
     plt.savefig(figs_path+args.model+'_tumor-loc.png', dpi=900)
     plt.savefig(figs_path+args.model+'_tumor-loc.eps', dpi=900)

@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='stats', choices=['train', 'stats'], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
-parser.add_argument('-M', '--model', type=str, default='model', help="Trained model name")
+parser.add_argument('-M', '--model', type=str, default='mlp', help="Trained model name")
 parser.add_argument('-W', '--wandb', type=bool, default=False, help="Whether to use wandb")
 parser.add_argument('--null_model', type=bool, choices=[False, True], help="Whether not to train the model to obtain a benchmark")
 
@@ -300,9 +300,9 @@ if __name__ == '__main__':
         from utils.figures import *
 
         # 1) Box plot for z-scores of the 19 folds
-        #boxplot(figs_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
+        boxplot(figs_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects)
         # 2) Normality plot for all metrics
-        #normality_plots(figs_path, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, args, PAT_subjects)
+        normality_plots(figs_path, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, args, PAT_subjects)
 
         
         # Correlations between metrics

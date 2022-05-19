@@ -15,7 +15,7 @@ from models.methods import Model, return_specs, to_array
 from models.networks import LinearRegres, NonLinearRegres
 from models.metrics import degree_distribution, euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity, KL_JS_divergences
 from utils.data import check_path, graph_dumper, two_session_graph_loader, prepare_data
-from utils.graphs import GraphFromCSV, create_anat_prior, load_anat_prior
+from utils.graphs import GraphFromCSV, GraphFromTensor, create_anat_prior, load_anat_prior
 from utils.paths import get_subjects, get_info
 
 parser = argparse.ArgumentParser()
@@ -23,7 +23,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='stats', choices=['train', 'stats'], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
-parser.add_argument('-M', '--model', type=str, default='mlp', help="Trained model name")
+parser.add_argument('-M', '--model', type=str, default='linear', help="Trained model name")
 parser.add_argument('-W', '--wandb', type=bool, default=False, help="Whether to use wandb")
 parser.add_argument('--null_model', type=bool, choices=[False, True], help="Whether not to train the model to obtain a benchmark")
 
@@ -33,15 +33,16 @@ parser.add_argument('-R', '--rois', type=int, default=166, help="Number of ROIs 
 parser.add_argument('-A', '--augment', type=int, default=1, help="Data augmentation factor")
 parser.add_argument('-V', '--validation', type=bool, default=False, help="Add validation step")
 parser.add_argument('-P', '--prior', type=bool, default=False, help="Load available prior")
+parser.add_argument('-T', '--threshold', type=float, default=0.2, help="Threshold for creating the prior")
 
 # Machine-learning specs
-parser.add_argument('-E', '--epochs', type=int, default=2, help="Number of epochs to train")
+parser.add_argument('-E', '--epochs', type=int, default=10, help="Number of epochs to train")
 parser.add_argument('-LR', '--learning_rate', type=float, default=0.01, help="Learning Rate")
 parser.add_argument('-O', '--optimizer', type=str, default='sgd', help="Optimizer")
 parser.add_argument('--val_freq', type=int, default=5, help="Number of epochs between validation steps")
 parser.add_argument('-B', '--batch', type=int, default=4, help="Batch size")
 parser.add_argument('-RE', '--regressor', type=str, default='linear', choices=['linear','nonlinear'], help="Type of regression")
-parser.add_argument('-L', '--loss', type=str, default='bayes_mse', choices=['bayes_mse', 'huber'], help="Reconstruction loss")
+parser.add_argument('-L', '--loss', type=str, default='mse', choices=['mse', 'huber'], help="Reconstruction loss used in training")
 args = parser.parse_args()
 
 
@@ -54,7 +55,7 @@ if __name__ == '__main__':
     # Relevant paths
     folder = args.folder+'_'+args.model+'/'
     check_path(folder)
-    #graph_path = check_path(folder+'csv/')
+    CMs_path = check_path(folder+'predictions/CMs/')
     figs_path = check_path(folder+'figures/')
     #flat_path = check_path(folder+'flat/')
     #metrics_csv_path = check_path(folder+'metrics/numerical/')
@@ -74,7 +75,7 @@ if __name__ == '__main__':
         if args.prior:
             prior, mean_connections = load_anat_prior('data/')
         else:
-            prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True)
+            prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True, threshold=args.threshold)
             sg = GraphFromCSV('data/prior.csv', 'prior', 'data/', rois=args.rois)
             sg.unflatten_graph(to_default=True, save_flat=True)
             sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
@@ -89,7 +90,7 @@ if __name__ == '__main__':
         print("Training using", args.device)
 
         # Results
-        CV_summary = pd.DataFrame(columns=['Subject', 'BayesMSE', 'MAE', 'PCC', 'CosineSimilarity', 'KL_Div', 'JS_Div'])
+        CV_summary = pd.DataFrame(columns=['Subject', 'MSE', 'MAE', 'PCC', 'CosineSimilarity', 'KL_Div', 'JS_Div'])
         Degree = pd.DataFrame(columns=['Subject', 'Predicted', 'Ground Truth', 'Degrees'])
         final_regres, _, _ = return_specs(args, prior=prior)
         final_model = final_regres.state_dict()
@@ -111,6 +112,10 @@ if __name__ == '__main__':
             if not args.null_model:
                 model.train()
             pred_LOO = model.test(input_test).cpu()
+            #graph_dumper(CMs_path, pred_LOO, [subject], 'ses-postop_prediction')
+            sg = GraphFromTensor(pred_LOO, subject+'_ses-postop_prediction', base_dir=CMs_path, rois=args.rois)
+            sg.unflatten_graph(to_default=True, save_flat=True)
+            sg.process_graph(log=False, reshuffle=True)
 
             # Metrics
             test_mse = F.mse_loss(pred_LOO, target_test)
@@ -119,7 +124,7 @@ if __name__ == '__main__':
             _, cs, _ = CosineSimilarity().forward(pred_LOO, target_test)
             kl_div, js_div = KL_JS_divergences(pred_LOO, target_test, rois=args.rois)
             CV_summary.loc[len(CV_summary.index)] = [subject, test_mse.item(), test_mae.item(), pcc.item(), cs.item(), kl_div.item(), js_div.item()]
-            dist, dgs = degree_distribution(pred_LOO, args.rois)[0]
+            dist, dgs = degree_distribution(pred_LOO, args.rois)
             Degree.loc[len(Degree.index)] = [subject, dist, degree_distribution(target_test, args.rois)[0], dgs]
 
             # Creating the final model
@@ -147,7 +152,7 @@ if __name__ == '__main__':
 
         # Reading-loading results
         PAT_subjects = list(CV_summary['Subject'].values)
-        mse = np.array(CV_summary['BayesMSE'], dtype=np.float64)
+        mse = np.array(CV_summary['MSE'], dtype=np.float64)
         mae = np.array(CV_summary['MAE'], dtype=np.float64)
         pcc = np.array(CV_summary['PCC'], dtype=np.float64)
         cs = np.array(CV_summary['CosineSimilarity'], dtype=np.float64)

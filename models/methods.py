@@ -126,12 +126,7 @@ def return_specs(args, prior=None):
     else:
         raise ValueError("Regressor not implemented")
 
-    if args.loss == 'bayes_mse':
-        loss = BayesianWeightedLoss(prior)
-    elif args.loss == 'huber':
-        loss = nn.HuberLoss()
-    else:
-        raise ValueError("Loss function not implemented")
+    loss = BayesianWeightedLoss(prior, type=args.loss)
 
     if args.optimizer == 'sgd': 
         sgd = optim.SGD(regres.parameters(), lr=args.learning_rate)

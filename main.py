@@ -112,9 +112,10 @@ if __name__ == '__main__':
             if not args.null_model:
                 model.train()
             pred_LOO = model.test(input_test, prior=prior).cpu()
-            #graph_dumper(CMs_path, pred_LOO, [subject], 'ses-postop_prediction')
+            
             sg = GraphFromTensor(pred_LOO, subject+'_ses-postop_prediction', base_dir=CMs_path, rois=args.rois)
             sg.unflatten_graph(to_default=True, save_flat=True)
+            sg.save()
             sg.process_graph(log=False, reshuffle=True)
 
             # Metrics

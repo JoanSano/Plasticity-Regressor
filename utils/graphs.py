@@ -143,8 +143,6 @@ class GraphFromTensor:
                 if save_flat:
                     # We save the flat graph with another name
                     np.savetxt(self.dir+self.name+'_flatCM.csv', self.conns, delimiter=',')
-                # We replace the original file with the unflattend graph
-                np.savetxt(self.graph, self.unflat_conns, delimiter=',')
                 # We re-initialize the graph with the unflattened graph and both the same name and directory
                 self.__init__(self.unflat_conns, self.name, self.dir)
             return self.unflat_conns
@@ -294,6 +292,9 @@ class GraphFromCSV:
                 # We re-initialize the graph with the unflattened graph and both the same name and directory
                 self.__init__(self.graph, self.name, self.dir)
             return self.unflat_conns
+
+    def save(self):
+        np.savetxt(self.graph, self.conns, delimiter=',')
 
 def create_anat_prior(CONTROL, out_path, threshold=.2, save=False):
     """ Creates a prior distribution of connections between rois """

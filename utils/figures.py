@@ -111,7 +111,7 @@ def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects, alpha
     plt.scatter(tm_3drop, pcc_3drop, s=10, label='r = ' + str(round(r_pcc_3drop,3)))
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
-    ax.set_ylim([0.82,0.905]), ax.set_yticks([0.82,0.84,0.86,0.88,0.90]), ax.set_yticklabels(['0.82','0.84','0.86','0.88','0.90'], fontsize=8)
+    ax.set_ylim([0.84,0.94]), ax.set_yticks([0.84,0.86,0.88,0.90,0.92,0.94]), ax.set_yticklabels(['0.84','0.86','0.88','0.90','0.92','0.94'], fontsize=8)
     ax.set_xticks([0,20,40,60,80]), ax.set_xticklabels(['0','20','40','60','80'], fontsize=8)
     ax.set_xlabel('Tumor size (cm$^3$)', fontsize=8), ax.set_ylabel('PCC', fontsize=8)
     plt.legend(loc=4, frameon=True, fontsize=8)
@@ -154,7 +154,7 @@ def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects, alpha
     )
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
-    ax.set_ylim([0.84,0.9]), ax.set_yticks([0.84,0.86,0.88,0.9]), ax.set_yticklabels(['0.84','0.86','0.88','0.90'])
+    ax.set_ylim([0.86,0.92]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels(['0.86','0.88','0.90','0.92'])
     ax.set_xticklabels(['Size<'+str(np.percentile(tm_size,50))+'cm$^3$','Size>'+str(np.percentile(tm_size,50))+'cm$^3$'])
     ax.set_xticks([1,2]), ax.set_ylabel('PCC')
     plt.savefig(figs_path+args.model+'_tumor-size.png', dpi=900)
@@ -220,7 +220,7 @@ def type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects, alpha=0.0
     )
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
-    ax.set_ylim([0.85,0.89]), ax.set_yticks([0.85,0.86,0.87,0.88,0.89]), ax.set_yticklabels(['0.85','0.86','0.87','0.88','0.89'])
+    ax.set_ylim([0.88,0.905]), ax.set_yticks([0.88,0.89,0.90]), ax.set_yticklabels(['0.88','0.89','0.90'])
     ax.set_xticks([1,2]), ax.set_xticklabels(['Meningioma', 'Glioma']), ax.set_ylabel('PCC')
     plt.savefig(figs_path+args.model+'_tumor-type.png', dpi=900)
     plt.savefig(figs_path+args.model+'_tumor-type.eps', dpi=900)
@@ -270,7 +270,7 @@ def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=
     )
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
-    ax.set_ylim([0.85,0.89]), ax.set_yticks([0.85,0.86,0.87,0.88,0.89]), ax.set_yticklabels(['0.85','0.86','0.87','0.88','0.89'])
+    ax.set_ylim([0.86,0.92]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels(['0.86','0.88','0.90','0.92'])
     ax.set_xticks([1,2]), ax.set_xticklabels(['Frontal', 'Other']), ax.set_ylabel('PCC')
     plt.savefig(figs_path+args.model+'_tumor-loc.png', dpi=900)
     plt.savefig(figs_path+args.model+'_tumor-loc.eps', dpi=900)

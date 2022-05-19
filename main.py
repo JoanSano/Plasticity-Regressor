@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from models.methods import Model, return_specs, to_array
 from models.networks import LinearRegres, NonLinearRegres
-from models.metrics import degree_distribution, euclidean_distance, plot_distances, PCC, BayesianWeightedLoss, CosineSimilarity, KL_JS_divergences
+from models.metrics import degree_distribution, PCC, BayesianWeightedLoss, CosineSimilarity, KL_JS_divergences
 from utils.data import check_path, graph_dumper, two_session_graph_loader, prepare_data
 from utils.graphs import GraphFromCSV, GraphFromTensor, create_anat_prior, load_anat_prior
 from utils.paths import get_subjects, get_info
@@ -73,10 +73,10 @@ if __name__ == '__main__':
         # Creating or loading priors
         # TODO: Improve the prior generation (maybe?) 
         if args.prior:
-            prior, mean_connections = load_anat_prior('data/')
+            prior, mean_connections = load_anat_prior(folder)
         else:
-            prior, mean_connections = create_anat_prior(CONTROL, 'data/', save=True, threshold=args.threshold)
-            sg = GraphFromCSV('data/prior.csv', 'prior', 'data/', rois=args.rois)
+            prior, mean_connections = create_anat_prior(CONTROL, folder, save=True, threshold=args.threshold)
+            sg = GraphFromCSV(folder+'/prior.csv', 'prior', folder, rois=args.rois)
             sg.unflatten_graph(to_default=True, save_flat=True)
             sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
 

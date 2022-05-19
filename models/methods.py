@@ -111,9 +111,9 @@ class Model(nn.Module):
                 return output
             else:
                 prior = prior.to(self.args.device)
-                posterior = 0*x 
+                posterior = 0*output 
                 for t in range(x.shape[0]):
-                    posterior[t] = torch.mul(x[t], prior.to(self.args.device))
+                    posterior[t] = torch.mul(output[t], prior.to(self.args.device))
                 return posterior
 
 def return_specs(args, prior=None):

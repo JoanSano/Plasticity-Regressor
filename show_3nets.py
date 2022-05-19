@@ -6,17 +6,28 @@ import torch
 from utils.graphs import GraphFromTensor, GraphFromCSV
 from utils.data import delete_rois
 
+try:
+    with open("./model_comparisson.txt", 'r') as f:
+        all_models = f.read().splitlines()
+except:
+    raise ValueError("No model_comparisson.txt file found")
+
+# The order matters
+model1 = all_models[0] #'results_fcnet_mse' #FCNET
+model2 = all_models[1] #'results_huber_linear' #HUBER
+model3 = all_models[2] #'results_null_mse' #NULL
+
 # Load graphs
 i, j, k = 3, 15, 28
-mlp_sub1 = f'results_mlp_mse/predictions/CMs/sub-PAT0{str(i)}_ses-postop_prediction.csv'
-mlp_sub2 = f'results_mlp_mse/predictions/CMs/sub-PAT{str(j)}_ses-postop_prediction.csv'
-mlp_sub3 = f'results_mlp_mse/predictions/CMs/sub-PAT{str(k)}_ses-postop_prediction.csv'
-hub_sub1 = f'results_linear_huber/predictions/CMs/sub-PAT0{str(i)}_ses-postop_prediction.csv'
-hub_sub2 = f'results_linear_huber/predictions/CMs/sub-PAT{str(j)}_ses-postop_prediction.csv'
-hub_sub3 = f'results_linear_huber/predictions/CMs/sub-PAT{str(k)}_ses-postop_prediction.csv'
-nul_sub1 = f'results_linear_null/predictions/CMs/sub-PAT0{str(i)}_ses-postop_prediction.csv'
-nul_sub2 = f'results_linear_null/predictions/CMs/sub-PAT{str(j)}_ses-postop_prediction.csv'
-nul_sub3 = f'results_linear_null/predictions/CMs/sub-PAT{str(k)}_ses-postop_prediction.csv'
+mlp_sub1 = f'{model1}/predictions/CMs/sub-PAT0{str(i)}_ses-postop_prediction.csv'
+mlp_sub2 = f'{model1}/predictions/CMs/sub-PAT{str(j)}_ses-postop_prediction.csv'
+mlp_sub3 = f'{model1}/predictions/CMs/sub-PAT{str(k)}_ses-postop_prediction.csv'
+hub_sub1 = f'{model2}/predictions/CMs/sub-PAT0{str(i)}_ses-postop_prediction.csv'
+hub_sub2 = f'{model2}/predictions/CMs/sub-PAT{str(j)}_ses-postop_prediction.csv'
+hub_sub3 = f'{model2}/predictions/CMs/sub-PAT{str(k)}_ses-postop_prediction.csv'
+nul_sub1 = f'{model3}/predictions/CMs/sub-PAT0{str(i)}_ses-postop_prediction.csv'
+nul_sub2 = f'{model3}/predictions/CMs/sub-PAT{str(j)}_ses-postop_prediction.csv'
+nul_sub3 = f'{model3}/predictions/CMs/sub-PAT{str(k)}_ses-postop_prediction.csv'
 g_truth1 = f'data/ses-postop/sub-PAT0{str(i)}_ses-postop_flatCM.csv'
 g_truth2 = f'data/ses-postop/sub-PAT{str(j)}_ses-postop_flatCM.csv'
 g_truth3 = f'data/ses-postop/sub-PAT{str(k)}_ses-postop_flatCM.csv'
@@ -178,8 +189,8 @@ cbar = fig.colorbar(one, cax=cbar_ax, orientation='horizontal', ticklocation='to
 cbar.set_label(label='Connection Strength', fontsize=16, weight='bold')
 cbar.ax.tick_params(labelsize=12)
 
-plt.savefig('data/mlp_predictions.eps', dpi=900)
-plt.savefig('data/mlp_predictions.png', dpi=900)
+plt.savefig(f'{model1}/mlp_predictions.eps', dpi=900)
+plt.savefig(f'{model1}/mlp_predictions.png', dpi=900)
 
 ########### FIGURE HUBER ###########
 cmin, cmax = 0, 8.5
@@ -223,5 +234,5 @@ cbar = fig.colorbar(one, cax=cbar_ax, orientation='horizontal', ticklocation='to
 cbar.set_label(label='Connection Strength', fontsize=16, weight='bold')
 cbar.ax.tick_params(labelsize=12)
 
-plt.savefig('data/huber_predictions.eps', dpi=900)
-plt.savefig('data/huber_predictions.png', dpi=900)
+plt.savefig(f'{model2}/huber_predictions.eps', dpi=900)
+plt.savefig(f'{model2}/huber_predictions.png', dpi=900)

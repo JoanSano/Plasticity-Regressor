@@ -103,10 +103,18 @@ class Model(nn.Module):
             if self.args.wandb: 
                 wandb.watch(self.network)
 
-    def test(self, x):
+    def test(self, x, prior=None):
         """ Generates a prediction of a given batch """
         with torch.no_grad():
-            return self.network(x.double().to(self.args.device))
+            output = self.network(x.double().to(self.args.device))
+            if prior is None:
+                return output
+            else:
+                prior = prior.to(self.args.device)
+                posterior = 0*x 
+                for t in range(x.shape[0]):
+                    posterior[t] = torch.mul(x[t], prior.to(self.args.device))
+                return posterior
 
 def return_specs(args, prior=None):
     """

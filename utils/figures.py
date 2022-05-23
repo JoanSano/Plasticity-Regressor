@@ -277,9 +277,10 @@ def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=
 
 def plot_degree_distribution(figs_path, args, degree_file):
     import pandas as pd
+    from scipy.ndimage.filters import uniform_filter1d
     degree_list = pd.read_csv(degree_file, sep='\t')
 
-    dgs = np.linspace(0,200,201)
+    dgs = np.linspace(0,1000,1001)
     dgs = np.array(dgs, dtype=np.int)
     distributions = np.zeros((len(degree_list["Subject"]), dgs.shape[0]))
 
@@ -302,7 +303,7 @@ def plot_degree_distribution(figs_path, args, degree_file):
 
     ax.set_xlabel('Degree', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
-    ax.set_xlim([0, 200])
+    ax.set_xlim([0, 500])
 
     plt.savefig(figs_path+args.model+'_pred-degree-probs.png', dpi=900)
     plt.savefig(figs_path+args.model+'_pred-degree-probs.eps', dpi=900)
@@ -326,7 +327,7 @@ def plot_degree_distribution(figs_path, args, degree_file):
 
     ax.set_xlabel('Degree', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
-    ax.set_xlim([0, 200])
+    ax.set_xlim([0, 500])
 
     plt.savefig(figs_path+args.model+'_real-degree-probs.png', dpi=900)
     plt.savefig(figs_path+args.model+'_real-degree-probs.eps', dpi=900)

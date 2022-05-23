@@ -71,7 +71,7 @@ class CosineSimilarity(nn.Module):
         std_cs = torch.std(cs)
         return cs, mean_cs, std_cs
 
-def degree_distribution(flattened, rois, maximum_degree=200, d_dg=1.):
+def degree_distribution(flattened, rois, maximum_degree=1000, d_dg=1.):
     """
     Returns the probability distribution and the degrees in the graph. 
     Inputs:

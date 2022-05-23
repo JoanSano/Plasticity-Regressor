@@ -333,6 +333,9 @@ if __name__ == '__main__':
         # 5) Checking for the effect of tumor location
         location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects)
 
+        # 6) Degree distributions
+        plot_degree_distribution(figs_path, args, folder+args.model+'_degree_distribution.tsv')
+
     # TODO: 
     # 1 - Check Grubb's test - OK
     # 2 - T-test on permutation of the folds - OK

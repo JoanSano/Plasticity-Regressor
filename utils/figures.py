@@ -274,3 +274,59 @@ def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=
     ax.set_xticks([1,2]), ax.set_xticklabels(['Frontal', 'Other']), ax.set_ylabel('PCC')
     plt.savefig(figs_path+args.model+'_tumor-loc.png', dpi=900)
     plt.savefig(figs_path+args.model+'_tumor-loc.eps', dpi=900)
+
+def plot_degree_distribution(figs_path, args, degree_file):
+    import pandas as pd
+    degree_list = pd.read_csv(degree_file, sep='\t')
+
+    dgs = np.linspace(0,200,201)
+    dgs = np.array(dgs, dtype=np.int)
+    distributions = np.zeros((len(degree_list["Subject"]), dgs.shape[0]))
+
+    # Predictions
+    fig, ax = plt.subplots(figsize=(10,10))
+    for i, (sub, dg_dist) in enumerate(zip(degree_list["Subject"], degree_list["Predicted"])):
+        dg_dist_new = []
+        k = 0
+        for s in dg_dist.split(' '):
+            dg_dist_new.append(s.strip('\n').strip('.').strip('[').strip(']'))
+        for s in range(len(dg_dist_new)):
+            try:
+                distributions[i, k] = float(dg_dist_new[s])
+                k += 1
+            except:
+                pass
+   
+        ax.plot(dgs,distributions[i], color=[np.random.random(),np.random.random(),np.random.random()], linewidth=1, alpha=0.1, label=sub)
+    ax.plot(dgs,np.mean(distributions, axis=0), color='k', linewidth=2.5, label='Mean')
+
+    ax.set_xlabel('Degree', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
+    ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
+    ax.set_xlim([0, 200])
+
+    plt.savefig(figs_path+args.model+'_pred-degree-probs.png', dpi=900)
+    plt.savefig(figs_path+args.model+'_pred-degree-probs.eps', dpi=900)
+
+    # Ground truth
+    fig, ax = plt.subplots(figsize=(10,10))
+    for i, (sub, dg_dist) in enumerate(zip(degree_list["Subject"], degree_list["Ground Truth"])):
+        dg_dist_new = []
+        k = 0
+        for s in dg_dist.split(' '):
+            dg_dist_new.append(s.strip('\n').strip('.').strip('[').strip(']'))
+        for s in range(len(dg_dist_new)):
+            try:
+                distributions[i, k] = float(dg_dist_new[s])
+                k += 1
+            except:
+                pass
+   
+        ax.plot(dgs,distributions[i], color=[np.random.random(),np.random.random(),np.random.random()], linewidth=1, alpha=0.1, label=sub)
+    ax.plot(dgs,np.mean(distributions, axis=0), color='k', linewidth=2.5, label='Mean')
+
+    ax.set_xlabel('Degree', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
+    ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
+    ax.set_xlim([0, 200])
+
+    plt.savefig(figs_path+args.model+'_real-degree-probs.png', dpi=900)
+    plt.savefig(figs_path+args.model+'_real-degree-probs.eps', dpi=900)

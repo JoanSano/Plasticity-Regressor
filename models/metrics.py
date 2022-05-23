@@ -92,7 +92,7 @@ def degree_distribution(flattened, rois, maximum_degree=200, d_dg=1.):
     for d in range(maximum_degree):
         d_inf, d_sup = dgs[d], dgs[d+1]
         degree_prob[d] = np.sum((D_G>d_inf)*(D_G<d_sup))
-    return degree_prob, dgs
+    return degree_prob/rois, dgs
 
 def KL_JS_divergences(input, target, rois, eps=1e-8):
     """ Computes the KL and JS Divergences between two degree distributions.

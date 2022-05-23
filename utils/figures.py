@@ -285,7 +285,7 @@ def plot_degree_distribution(figs_path, args, degree_file):
     distributions = np.zeros((len(degree_list["Subject"]), dgs.shape[0]))
 
     # Predictions
-    fig, ax = plt.subplots(figsize=(10,10))
+    fig, ax = plt.subplots(figsize=(8,8))
     for i, (sub, dg_dist) in enumerate(zip(degree_list["Subject"], degree_list["Predicted"])):
         dg_dist_new = []
         k = 0
@@ -296,20 +296,13 @@ def plot_degree_distribution(figs_path, args, degree_file):
                 distributions[i, k] = float(dg_dist_new[s])
                 k += 1
             except:
-                pass
-   
-        ax.plot(dgs,distributions[i], color=[np.random.random(),np.random.random(),np.random.random()], linewidth=1, alpha=0.1, label=sub)
-    ax.plot(dgs,np.mean(distributions, axis=0), color='k', linewidth=2.5, label='Mean')
+                pass   
+        ax.plot(dgs,distributions[i], color=[np.random.random(),np.random.random(),np.random.random()], linewidth=1, alpha=0.1)
 
-    ax.set_xlabel('Degree', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
-    ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
-    ax.set_xlim([0, 500])
-
-    plt.savefig(figs_path+args.model+'_pred-degree-probs.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_pred-degree-probs.eps', dpi=900)
+    to_plot = uniform_filter1d(np.mean(distributions, axis=0), 5)
+    ax.plot(dgs,to_plot, color='k', linewidth=2.5, label='Predicted')
 
     # Ground truth
-    fig, ax = plt.subplots(figsize=(10,10))
     for i, (sub, dg_dist) in enumerate(zip(degree_list["Subject"], degree_list["Ground Truth"])):
         dg_dist_new = []
         k = 0
@@ -321,13 +314,16 @@ def plot_degree_distribution(figs_path, args, degree_file):
                 k += 1
             except:
                 pass
-   
-        ax.plot(dgs,distributions[i], color=[np.random.random(),np.random.random(),np.random.random()], linewidth=1, alpha=0.1, label=sub)
-    ax.plot(dgs,np.mean(distributions, axis=0), color='k', linewidth=2.5, label='Mean')
+        #ax.plot(dgs,distributions[i], color=[np.random.random(),np.random.random(),np.random.random()], linewidth=1, alpha=0.1, label=sub)
 
-    ax.set_xlabel('Degree', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
+    to_plot = uniform_filter1d(np.mean(distributions, axis=0), 5)
+    ax.plot(dgs,to_plot, color='r', linestyle='--', linewidth=2.5, label='Ground Truth')
+
+    ax.set_xlabel('log(1+$\omega$)', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
-    ax.set_xlim([0, 500])
+    ax.set_xlim([0, 500]), ax.set_ylim([0, 0.035])
+    ax.set_title("FCNET", fontsize=20)
+    plt.legend(loc='upper right', frameon=False, fontsize=20)
 
-    plt.savefig(figs_path+args.model+'_real-degree-probs.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_real-degree-probs.eps', dpi=900)
+    plt.savefig(figs_path+args.model+'_degree-probs.png', dpi=900)
+    plt.savefig(figs_path+args.model+'_degree-probs.eps', dpi=900)

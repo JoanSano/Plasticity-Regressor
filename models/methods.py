@@ -81,9 +81,9 @@ class Model(nn.Module):
         for ep in range(1, self.args.epochs+1):
             # Loading training and validation data
             for domain in range(len(self.train_data)):
-                tr_loader.append(DataLoader(self.train_data[domain], batch_size=self.args.batch, shuffle=True))
+                tr_loader.append(DataLoader(self.train_data[domain], batch_size=self.args.batch))
                 if self.val_step:
-                    val_loader.append(DataLoader(self.val_data[domain], batch_size=self.args.batch, shuffle=True))
+                    val_loader.append(DataLoader(self.val_data[domain], batch_size=self.args.batch))
             # Training   
             with torch.enable_grad():
                 loss_tr = self.__epoch(tr_loader, backprop=True)

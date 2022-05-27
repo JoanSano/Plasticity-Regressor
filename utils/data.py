@@ -217,7 +217,7 @@ def prepare_data(path, rois, norm=False, flatten=True, del_rois=None, augmentati
 
     if del_rois is not None:
         CONTROL, rois = delete_rois(CONTROL, ROIs=del_rois)
-        pre, _ = delete_rois(post, ROIs=del_rois)
+        pre, _ = delete_rois(pre, ROIs=del_rois)
         post, _ = delete_rois(post, ROIs=del_rois)
         PATIENT_1session,_ = delete_rois(PATIENT_1session, ROIs=del_rois)
 

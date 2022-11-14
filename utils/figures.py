@@ -1,13 +1,80 @@
+import colorsys
 import numpy as np
 import matplotlib.pylab as plt
-from scipy.stats import probplot, pearsonr, permutation_test, ttest_ind, mannwhitneyu, f_oneway, kruskal
+from scipy.stats import probplot, pearsonr, permutation_test, ttest_ind, mannwhitneyu, f_oneway, kruskal, linregress
 
 from models.methods import f_test, to_array
+
+def barplot_annotate_brackets(num1, num2, data, center, height, yerr=None, dh=.05, barh=.05, fs=None, maxasterix=3):
+    """ 
+    Annotate barplot with p-values.
+
+    :param num1: number of left bar to put bracket over
+    :param num2: number of right bar to put bracket over
+    :param data: string to write or number for generating asterixes
+    :param center: centers of all bars (like plt.bar() input)
+    :param height: heights of all bars (like plt.bar() input)
+    :param yerr: yerrs of all bars (like plt.bar() input)
+    :param dh: height offset over bar / bar + yerr in axes coordinates (0 to 1)
+    :param barh: bar height in axes coordinates (0 to 1)
+    :param fs: font size
+    :param maxasterix: maximum number of asterixes to write (for very small p-values)
+    """
+
+    if type(data) is str:
+        text = data
+    else:
+        # * is p < 0.05
+        # ** is p < 0.005
+        # *** is p < 0.0005
+        # etc.
+        text = ''
+        p = .05
+
+        while data < p:
+            text += '*'
+            p /= 10.
+
+            if maxasterix and len(text) == maxasterix:
+                break
+
+        if len(text) == 0:
+            text = 'n. s.'
+
+    lx, ly = center[num1], height[num1]
+    rx, ry = center[num2], height[num2]
+
+    if yerr:
+        ly += yerr[num1]
+        ry += yerr[num2]
+
+    ax_y0, ax_y1 = plt.gca().get_ylim()
+    dh *= (ax_y1 - ax_y0)
+    barh *= (ax_y1 - ax_y0)
+
+    y = max(ly, ry) + dh
+
+    barx = [lx, lx, rx, rx]
+    bary = [y, y+barh, y+barh, y]
+    mid = ((lx+rx)/2, y+barh)
+
+    plt.plot(barx, bary, c='black', lw=0.5)
+
+    kwargs = dict(ha='center', va='bottom')
+    if fs is not None:
+        kwargs['fontsize'] = fs
+
+    plt.text(*mid, text, **kwargs)
 
 def boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subjects):
     subject_to_follow_max = np.argmax(mse) # Highest zscore of reconstruction error
     subject_to_follow_min = np.argmin(mse) # Lowest zscore of reconstruction error
     fig, ax = plt.subplots(figsize=(8,6))
+    plt.subplots_adjust(left=0.08,
+                    bottom=0.08, 
+                    right=0.98, 
+                    top=0.92)
+    plt.gcf().text(0.01, 0.96, "A", fontsize=20, fontweight="bold")
     positions = [2, 4, 6, 8, 10, 12]
     bx_data = np.array([mse_z, mae_z, pcc_z, cs_z, kl_z, js_z]).T
     for i in range(6):   
@@ -32,11 +99,15 @@ def boxplot(png_path, args, mse, mse_z, mae_z, pcc_z, cs_z, kl_z, js_z, PAT_subj
         b.set_facecolor([0.3,0.3,0.6,0.2])
         b.set_linewidth(1.5)
     plt.legend(loc=9, frameon=True, fontsize=10, ncol=2, bbox_to_anchor=(0.5,1.1))
-    plt.savefig(png_path+args.model+'_boxplot.png', dpi=900)
-    plt.savefig(png_path+args.model+'_boxplot.eps', dpi=900)
+    plt.savefig(png_path+args.model+'_boxplot.svg', dpi=1000)
+    plt.savefig(png_path+args.model+'_boxplot.eps', dpi=1000)
 
 def normality_plots(png_path, mse, mae, pcc, cs, kl, js, args, PAT_subjects):
     fig, ax = plt.subplots(figsize=(6,4.5))
+    plt.subplots_adjust(left=0.09,
+                    bottom=0.1, 
+                    right=0.98, 
+                    top=0.98)
     norm_mse, fit_mse = probplot(mse)
     norm_mae, fit_mae = probplot(mae)
     norm_pcc, fit_pcc = probplot(pcc)
@@ -57,8 +128,8 @@ def normality_plots(png_path, mse, mae, pcc, cs, kl, js, args, PAT_subjects):
     ax.set_xlabel('Theoretical Quantiles', fontsize=12), ax.set_ylabel('zscore', fontsize=12)
     ax.set_xticks([-2,-1,0,1,2]), ax.set_xticklabels(['-2', '-1', '0', '1', '2'])
     plt.legend(loc=2, frameon=False, fontsize=10, ncol=2)
-    plt.savefig(png_path+args.model+'_normality.png', dpi=900)
-    plt.savefig(png_path+args.model+'_normality.eps', dpi=900)
+    plt.savefig(png_path+args.model+'_normality.svg', dpi=1000)
+    plt.savefig(png_path+args.model+'_normality.eps', dpi=1000)
 
     print("Linear fits for the normality plots:")
     print("MSE: r = ",fit_mse[2])
@@ -107,16 +178,27 @@ def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects, alpha
     permu_4mae = permutation_test((mae_4drop, tm_4drop), statistic, n_resamples=samples, alternative='greater')
     
     fig, ax = plt.subplots(figsize=(5,3.5))
+    plt.subplots_adjust(left=0.12,
+                    bottom=0.12, 
+                    right=0.98, 
+                    top=0.98)
+    plt.gcf().text(0.018, 0.95, "B", fontsize=15, fontweight="bold")
     plt.scatter(tm_size, pcc, s=10, label='r = ' + str(round(r_pcc,3)))
     plt.scatter(tm_3drop, pcc_3drop, s=10, label='r = ' + str(round(r_pcc_3drop,3)))
+    slope, intercept, _, _, _ = linregress(tm_size, pcc)
+    fit = slope * np.linspace(0,90,400) + intercept
+    plt.plot(np.linspace(0,90,400), fit, color='b', linewidth=0.5)
+    slope, intercept, _, _, _ = linregress(tm_3drop, pcc_3drop)
+    fit = slope * np.linspace(0,60,400) + intercept
+    plt.plot(np.linspace(0,60,400), fit, color='orange', linewidth=0.5)
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
     ax.set_ylim([0.84,0.94]), ax.set_yticks([0.84,0.86,0.88,0.90,0.92,0.94]), ax.set_yticklabels(['0.84','0.86','0.88','0.90','0.92','0.94'], fontsize=8)
     ax.set_xticks([0,20,40,60,80]), ax.set_xticklabels(['0','20','40','60','80'], fontsize=8)
     ax.set_xlabel('Tumor size (cm$^3$)', fontsize=8), ax.set_ylabel('PCC', fontsize=8)
     plt.legend(loc=4, frameon=True, fontsize=8)
-    plt.savefig(figs_path+args.model+'_size-effects.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_size-effects.eps', dpi=900)
+    plt.savefig(figs_path+args.model+'_size-effects.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_size-effects.eps', dpi=1000)
 
     print("Correlations with tumor size:")
     print("PCC: r = {:.4f}, one-sided p = {:.4f} and p_permu = {:.4f}".format(r_pcc, p_pcc, permu_pcc.pvalue))
@@ -147,18 +229,22 @@ def size_correlation(figs_path, args, mae, pcc, tumor_sizes, PAT_subjects, alpha
     print("=============================")
 
     fig, ax = plt.subplots(figsize=(5,4))
+    plt.subplots_adjust(bottom=0.08, 
+                    right=0.98, 
+                    top=0.98)
     ax.bar([1,2], [mean_small, mean_large], 
         yerr=[std_small, std_large],linewidth=2,
         color=[0,0,1,0.5],edgecolor=[0,0,0,1],error_kw=dict(lw=2),
         ecolor='k', capsize=15, width=0.75, align='center'
     )
+    barplot_annotate_brackets(0, 1, '**', [1,2], [mean_small, mean_large], dh=0.005, barh=.001, fs=10)
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
     ax.set_ylim([0.86,0.92]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels(['0.86','0.88','0.90','0.92'])
     ax.set_xticklabels(['Size<'+str(np.percentile(tm_size,50))+'cm$^3$','Size>'+str(np.percentile(tm_size,50))+'cm$^3$'])
     ax.set_xticks([1,2]), ax.set_ylabel('PCC')
-    plt.savefig(figs_path+args.model+'_tumor-size.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_tumor-size.eps', dpi=900)
+    plt.savefig(figs_path+args.model+'_tumor-size.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_tumor-size.eps', dpi=1000)
 
     groups = [
         np.array([j for j,i in zip(pcc,tm_size) if i<=np.percentile(tm_size,33)]),
@@ -212,7 +298,12 @@ def type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects, alpha=0.0
     print("MAE two-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_U, p_mae_U/2))
     print("=============================")
 
-    fig, ax = plt.subplots(figsize=(5,4))
+    fig, ax = plt.subplots(figsize=(3,4))
+    plt.subplots_adjust(left=0.21,
+                    bottom=0.08, 
+                    right=0.98, 
+                    top=0.98)
+    plt.gcf().text(0.007, 0.96, "C", fontsize=15, fontweight="bold")
     ax.bar([1,2], [mean_pcc_menin, mean_pcc_gliom], 
         yerr=[std_pcc_menin, std_pcc_gliom],linewidth=2,
         color=[0,0,1,0.5],edgecolor=[0,0,0,1],error_kw=dict(lw=2),
@@ -220,36 +311,36 @@ def type_effects(figs_path, args, mae, pcc, tumor_types, PAT_subjects, alpha=0.0
     )
 
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
-    ax.set_ylim([0.88,0.905]), ax.set_yticks([0.88,0.89,0.90]), ax.set_yticklabels(['0.88','0.89','0.90'])
+    ax.set_ylim([0.88,0.90]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels(['0.86','0.88','0.90','0.92'])
     ax.set_xticks([1,2]), ax.set_xticklabels(['Meningioma', 'Glioma']), ax.set_ylabel('PCC')
-    plt.savefig(figs_path+args.model+'_tumor-type.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_tumor-type.eps', dpi=900)
+    plt.savefig(figs_path+args.model+'_tumor-type.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_tumor-type.eps', dpi=1000)
 
 def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=0.05):
-    frontal, other = [] , []
+    frontal, non_periven = [] , []
     for s in range(len(PAT_subjects)):
         if 'frontal' in tumor_locs[PAT_subjects[s]].lower():
             frontal.append([pcc[s], mae[s]])
         else:
-            other.append([pcc[s], mae[s]])
+            non_periven.append([pcc[s], mae[s]])
     frontal = np.array(frontal, dtype=np.float64)
-    other = np.array(other, dtype=np.float64)
+    non_periven = np.array(non_periven, dtype=np.float64)
 
     mean_pcc_front, mean_mae_front = np.mean(frontal[:,0]), np.mean(frontal[:,1])
-    mean_pcc_oth, mean_mae_oth = np.mean(other[:,0]), np.mean(other[:,1])
+    mean_pcc_oth, mean_mae_oth = np.mean(non_periven[:,0]), np.mean(non_periven[:,1])
     std_pcc_front, std_mae_front = np.std(frontal[:,0])/len(frontal), np.std(frontal[:,1])/len(frontal)
-    std_pcc_oth, std_mae_oth = np.std(other[:,0])/len(other), np.std(other[:,1])/len(other)
+    std_pcc_oth, std_mae_oth = np.std(non_periven[:,0])/len(non_periven), np.std(non_periven[:,1])/len(non_periven)
     
     # PCC
-    _, p_var = f_test(frontal[:,0], other[:,0])
+    _, p_var = f_test(frontal[:,0], non_periven[:,0])
     eq_var = True if p_var>alpha else False
-    _, p_pcc_T = ttest_ind(frontal[:,0], other[:,0], equal_var=eq_var, alternative='two-sided')
-    _, p_pcc_U = mannwhitneyu(frontal[:,0], other[:,0], alternative='two-sided')
+    _, p_pcc_T = ttest_ind(frontal[:,0], non_periven[:,0], equal_var=eq_var, alternative='two-sided')
+    _, p_pcc_U = mannwhitneyu(frontal[:,0], non_periven[:,0], alternative='two-sided')
     # MAE
-    _, p_var = f_test(frontal[:,1], other[:,1])
+    _, p_var = f_test(frontal[:,1], non_periven[:,1])
     eq_var = True if p_var>alpha else False
-    _, p_mae_T = ttest_ind(frontal[:,1], other[:,1], equal_var=eq_var, alternative='two-sided')
-    _, p_mae_U = mannwhitneyu(frontal[:,1], other[:,1], alternative='two-sided')
+    _, p_mae_T = ttest_ind(frontal[:,1], non_periven[:,1], equal_var=eq_var, alternative='two-sided')
+    _, p_mae_U = mannwhitneyu(frontal[:,1], non_periven[:,1], alternative='two-sided')
 
     print("Error with tumor location: (MEAN +- SEM)")
     print("Frontal: PCC = {:.4f} +/- {:.4}, MAE = {:.4f} +/- {:.4}".format(mean_pcc_front, std_pcc_front, mean_mae_front, std_mae_front))
@@ -262,7 +353,12 @@ def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=
     print("MAE one-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_U, p_mae_U/2))
     print("=============================")
 
-    fig, ax = plt.subplots(figsize=(5,4))
+    fig, ax = plt.subplots(figsize=(3,4))
+    plt.gcf().text(0.007, 0.96, "D", fontsize=15, fontweight="bold")
+    plt.subplots_adjust(left=0.21,
+                    bottom=0.08, 
+                    right=0.98, 
+                    top=0.98)
     ax.bar([1,2], [mean_pcc_front, mean_pcc_oth], 
         yerr=[std_pcc_front, std_pcc_oth],linewidth=2,
         color=[0,0,1,0.5],edgecolor=[0,0,0,1],error_kw=dict(lw=2),
@@ -272,8 +368,119 @@ def location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects, alpha=
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
     ax.set_ylim([0.86,0.92]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels(['0.86','0.88','0.90','0.92'])
     ax.set_xticks([1,2]), ax.set_xticklabels(['Frontal', 'Other']), ax.set_ylabel('PCC')
-    plt.savefig(figs_path+args.model+'_tumor-loc.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_tumor-loc.eps', dpi=900)
+    plt.savefig(figs_path+args.model+'_tumor-loc.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_tumor-loc.eps', dpi=1000)
+
+def periventricularity_effects(figs_path, args, mae, pcc, tumor_ventricular, PAT_subjects, alpha=0.05):
+    perivent, other = [] , []
+    for s in range(len(PAT_subjects)):
+        if 'yes' in tumor_ventricular[PAT_subjects[s]].lower():
+            perivent.append([pcc[s], mae[s]])
+        else:
+            other.append([pcc[s], mae[s]])
+    perivent = np.array(perivent, dtype=np.float64)
+    other = np.array(other, dtype=np.float64)
+
+    mean_pcc_front, mean_mae_front = np.mean(perivent[:,0]), np.mean(perivent[:,1])
+    mean_pcc_oth, mean_mae_oth = np.mean(other[:,0]), np.mean(other[:,1])
+    std_pcc_front, std_mae_front = np.std(perivent[:,0])/len(perivent), np.std(perivent[:,1])/len(perivent)
+    std_pcc_oth, std_mae_oth = np.std(other[:,0])/len(other), np.std(other[:,1])/len(other)
+    
+    # PCC
+    _, p_var = f_test(perivent[:,0], other[:,0])
+    eq_var = True if p_var>alpha else False
+    _, p_pcc_T = ttest_ind(perivent[:,0], other[:,0], equal_var=eq_var, alternative='two-sided')
+    _, p_pcc_U = mannwhitneyu(perivent[:,0], other[:,0], alternative='two-sided')
+    # MAE
+    _, p_var = f_test(perivent[:,1], other[:,1])
+    eq_var = True if p_var>alpha else False
+    _, p_mae_T = ttest_ind(perivent[:,1], other[:,1], equal_var=eq_var, alternative='two-sided')
+    _, p_mae_U = mannwhitneyu(perivent[:,1], other[:,1], alternative='two-sided')
+
+    print("Error with tumor periventricularity: (MEAN +- SEM)")
+    print("Perivent: PCC = {:.4f} +/- {:.4}, MAE = {:.4f} +/- {:.4}".format(mean_pcc_front, std_pcc_front, mean_mae_front, std_mae_front))
+    print("Non-PV: PCC = {:.4f} +/- {:.4}, MAE = {:.4f} +/- {:.4}".format(mean_pcc_oth, std_pcc_oth, mean_mae_oth, std_mae_oth))
+    print("Differences between tumor periventricularities, T-test:")
+    print("PCC two-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_T, p_pcc_T/2))
+    print("MAE two-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_T, p_mae_T/2))
+    print("Differences between tumor periventricularities, Mann-Whitney:")
+    print("PCC one-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_U, p_pcc_U/2))
+    print("MAE one-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_U, p_mae_U/2))
+    print("=============================")
+
+    fig, ax = plt.subplots(figsize=(5,4))
+    plt.subplots_adjust(bottom=0.08, 
+                    right=0.98, 
+                    top=0.98)
+    ax.bar([1,2], [mean_pcc_front, mean_pcc_oth], 
+        yerr=[std_pcc_front, std_pcc_oth],linewidth=2,
+        color=[0,0,1,0.5],edgecolor=[0,0,0,1],error_kw=dict(lw=2),
+        ecolor='k', capsize=15, width=0.75, align='center'
+    )
+
+    ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False), ax.spines['bottom'].set_visible(False)
+    ax.set_ylim([0.86,0.92]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels(['0.86','0.88','0.90','0.92'])
+    ax.set_xticks([1,2]), ax.set_xticklabels(['PV', 'Non-PV']), ax.set_ylabel('PCC')
+    plt.savefig(figs_path+args.model+'_tumor-PV.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_tumor-PV.eps', dpi=1000)
+
+def grade_effects(figs_path, args, mae, pcc, tumor_grade, PAT_subjects, alpha=0.05):
+    grade2_3, other = [] , []
+    for s in range(len(PAT_subjects)):
+        if 'II' in tumor_grade[PAT_subjects[s]]:#.lower():
+            grade2_3.append([pcc[s], mae[s]])
+        else:
+            other.append([pcc[s], mae[s]])
+    grade2_3 = np.array(grade2_3, dtype=np.float64)
+    other = np.array(other, dtype=np.float64)
+
+    mean_pcc_front, mean_mae_front = np.mean(grade2_3[:,0]), np.mean(grade2_3[:,1])
+    mean_pcc_oth, mean_mae_oth = np.mean(other[:,0]), np.mean(other[:,1])
+    std_pcc_front, std_mae_front = np.std(grade2_3[:,0])/len(grade2_3), np.std(grade2_3[:,1])/len(grade2_3)
+    std_pcc_oth, std_mae_oth = np.std(other[:,0])/len(other), np.std(other[:,1])/len(other)
+    
+    # PCC
+    _, p_var = f_test(grade2_3[:,0], other[:,0])
+    eq_var = True if p_var>alpha else False
+    _, p_pcc_T = ttest_ind(grade2_3[:,0], other[:,0], equal_var=eq_var, alternative='two-sided')
+    _, p_pcc_U = mannwhitneyu(grade2_3[:,0], other[:,0], alternative='two-sided')
+    # MAE
+    _, p_var = f_test(grade2_3[:,1], other[:,1])
+    eq_var = True if p_var>alpha else False
+    _, p_mae_T = ttest_ind(grade2_3[:,1], other[:,1], equal_var=eq_var, alternative='two-sided')
+    _, p_mae_U = mannwhitneyu(grade2_3[:,1], other[:,1], alternative='two-sided')
+
+    print("Error with tumor grade: (MEAN +- SEM)")
+    print(mean_pcc_front.shape, mean_pcc_oth.shape)
+    print("Grade II-III: PCC = {:.4f} +/- {:.4}, MAE = {:.4f} +/- {:.4}".format(mean_pcc_front, std_pcc_front, mean_mae_front, std_mae_front))
+    print("Grade I: PCC = {:.4f} +/- {:.4}, MAE = {:.4f} +/- {:.4}".format(mean_pcc_oth, std_pcc_oth, mean_mae_oth, std_mae_oth))
+    print("Differences between tumor grade, T-test:")
+    print("PCC two-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_T, p_pcc_T/2))
+    print("MAE two-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_T, p_mae_T/2))
+    print("Differences between tumor grade, Mann-Whitney:")
+    print("PCC one-sided p = {:.4f} and one-sided p = {:.4}".format(p_pcc_U, p_pcc_U/2))
+    print("MAE one-sided p = {:.4f} and one-sided p = {:.4}".format(p_mae_U, p_mae_U/2))
+    print("=============================")
+
+    fig, ax = plt.subplots(figsize=(2.5,4))
+    plt.subplots_adjust(left=0.05,
+                    bottom=0.08, 
+                    right=0.98, 
+                    top=0.98)
+    ax.bar([1,2], [mean_pcc_oth, mean_pcc_front], 
+        yerr=[std_pcc_oth, std_pcc_front],linewidth=2,
+        color=[0,0,1,0.5],edgecolor=[0,0,0,1],error_kw=dict(lw=2),
+        ecolor='k', capsize=15, width=0.75, align='center'
+    )
+    barplot_annotate_brackets(0, 1, '*', [1,2], [mean_pcc_oth, mean_pcc_front], dh=0.005, barh=.001, fs=10)
+
+    ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False), ax.spines['bottom'].set_visible(False)
+    ax.set_ylim([0.86,0.92]), ax.set_yticks([0.86,0.88,0.90,0.92]), ax.set_yticklabels([])
+    ax.tick_params(axis='y', length=0)
+    ax.set_xticks([1,2]), ax.set_xticklabels(['Grade I', 'Grade II-III'])#, ax.set_ylabel('PCC')
+    plt.savefig(figs_path+args.model+'_tumor-grade.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_tumor-grade.eps', dpi=1000)
 
 def plot_degree_distribution(figs_path, args, degree_file):
     import pandas as pd
@@ -322,8 +529,36 @@ def plot_degree_distribution(figs_path, args, degree_file):
     ax.set_xlabel('log(1+$\omega$)', fontsize=20), ax.set_ylabel('Probability', fontsize=20)
     ax.spines['right'].set_visible(False), ax.spines['top'].set_visible(False)
     ax.set_xlim([0, 500]), ax.set_ylim([0, 0.035])
-    ax.set_title("FCNET", fontsize=20)
+    ax.set_title("HUBER", fontsize=20)
     plt.legend(loc='upper right', frameon=False, fontsize=20)
 
-    plt.savefig(figs_path+args.model+'_degree-probs.png', dpi=900)
-    plt.savefig(figs_path+args.model+'_degree-probs.eps', dpi=900)
+    plt.savefig(figs_path+args.model+'_degree-probs.svg', dpi=1000)
+    plt.savefig(figs_path+args.model+'_degree-probs.eps', dpi=1000)
+
+def prior_stats(thetas, entropies, mods, folder, prior_1, prior_2):
+    fig, ax = plt.subplots(1, 2, figsize=(7, 3))
+    plt.subplots_adjust(left=0.09,
+                    bottom=0.14, 
+                    right=0.98, 
+                    top=0.98, 
+                    wspace=0.6, 
+                    hspace=1)
+
+    ax[0].plot(thetas, entropies, 'k', linewidth=2)
+    ax[0].set_ylabel('Entropy', fontsize=10), ax[0].set_xlabel("Threshold", fontsize=10)
+    ax[0].vlines(0.2, 8.7, 9.3, colors='r', linestyles='dotted')
+    ax[0].vlines(0.7, 8.7, 9.3, colors='green', linestyles='dotted')
+    ax[0].set_xticks([0,0.2,0.7,1]), ax[0].set_yticks([8.8,8.9,9.0,9.1,9.2])
+    ax[0].set_xlim([0,1]), ax[0].set_ylim([8.75,9.21])
+    ax_bis = ax[0].twinx()
+    ax_bis.plot(thetas, mods, 'b', linewidth=2)
+    ax_bis.set_ylabel('Modularity', fontsize=10, color='blue')
+
+    y1, binEdges = np.histogram(prior_1, bins=10)
+    y2, _ = np.histogram(prior_2, bins=10)
+    bincenters = 0.5 * (binEdges[1:] + binEdges[:-1])
+    ax[1].plot(bincenters, y1, color='red')
+    ax[1].plot(bincenters, y2, color='green')
+    ax[1].set_xticks([0,0.5,1]), ax[1].set_xlabel('P($\lambda$=1)')
+    ax[1].set_ylabel('Counts')
+    plt.savefig(folder + '/prior_stats.svg', dpi=1000)

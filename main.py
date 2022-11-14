@@ -20,7 +20,7 @@ from utils.paths import get_subjects, get_info
 
 parser = argparse.ArgumentParser()
 # General settings
-parser.add_argument('--mode', type=str, default='stats', choices=['train', 'stats'], help="Train the model or just report statistics")
+parser.add_argument('--mode', type=str, default='train', choices=['train', 'stats'], help="Train the model or just report statistics")
 parser.add_argument('-D', '--device', type=str, default='cuda', help="Device in which to run the code")
 parser.add_argument('-F', '--folder', type=str, default='results', help="Results directory")
 parser.add_argument('-M', '--model', type=str, default='linear', help="Trained model name")
@@ -32,7 +32,7 @@ parser.add_argument('-S', '--split', type=int, default=20, help="Training and te
 parser.add_argument('-R', '--rois', type=int, default=166, help="Number of ROIs to use")
 parser.add_argument('-A', '--augment', type=int, default=1, help="Data augmentation factor")
 parser.add_argument('-V', '--validation', type=bool, default=False, help="Add validation step")
-parser.add_argument('-P', '--prior', type=bool, default=False, help="Load available prior")
+parser.add_argument('-P', '--prior', type=str, default=False, help="Load available prior")
 parser.add_argument('-T', '--threshold', type=float, default=0.2, help="Threshold for creating the prior")
 
 # Machine-learning specs
@@ -67,12 +67,38 @@ if __name__ == '__main__':
 
         # Preparing data
         (CONTROL, CON_subjects), (data, PAT_subjects), (PAT_1session, PAT_1session_subjects) = prepare_data(
-        'data/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=[35,36,81,82]
+        'data_hybrid/', dtype=torch.float64, rois=170, norm=False, flatten=True, del_rois=[35,36,81,82]
         )
         
-        # Creating or loading priors
-        # TODO: Improve the prior generation (maybe?) 
-        if args.prior:
+        # Creating or loading priors 
+        """ from scipy.stats import entropy
+        import networkx as nx
+        thetas = np.array([0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1])
+        entropies = thetas * 0
+        mods = thetas * 0
+        for i, theta in enumerate(thetas):
+            prior, mean_connections = create_anat_prior(CONTROL, folder, save=True, threshold=theta)
+            sg = GraphFromCSV(folder+'/prior.csv', 'prior', folder, rois=args.rois)
+            sg.unflatten_graph(to_default=True, save_flat=True)
+            sg.process_graph(log=False, reshuffle=True, bar_label='Probability of Connection')
+            prior_graph = sg.get_connections()
+            entropies[i] = entropy(prior)
+            mods[i] = nx.algorithms.community.modularity(
+                            nx.from_numpy_array(prior_graph),
+                            nx.algorithms.community.louvain_communities(
+                                    nx.from_numpy_array(prior_graph)
+                                ), 
+                            weight='weight'
+                        )
+            if theta == .2:
+                prior_1 = prior
+            if theta == .7:
+                prior_2 = prior
+        from utils.figures import prior_stats
+        prior_stats(thetas, entropies, mods, folder, prior_1, prior_2)
+        quit() """
+
+        if args.prior[0].upper()+args.prior[1:].lower() == True:
             prior, mean_connections = load_anat_prior(folder)
         else:
             prior, mean_connections = create_anat_prior(CONTROL, folder, save=True, threshold=args.threshold)
@@ -109,7 +135,7 @@ if __name__ == '__main__':
             model = Model(regres, optimizer, loss, data_fold, args)
 
             # Training and testing
-            if not args.null_model:
+            if not args.null_model or args.null_model==False:
                 model.train()
             pred_LOO = model.test(input_test, prior=prior).cpu()
             
@@ -170,6 +196,8 @@ if __name__ == '__main__':
         tumor_sizes = {k: dict(info["tumor size (cub cm)"])[k] for k in PAT_subjects}
         tumor_types = {k: dict(info["tumor type & grade"])[k] for k in PAT_subjects}
         tumor_locs = {k: dict(info["tumor location"])[k] for k in PAT_subjects}
+        tumor_ventricles = {k: dict(info["ventricles"])[k] for k in PAT_subjects}       
+        tumor_grade = {k: dict(info["tumor type & grade"])[k] for k in PAT_subjects}
         # Acces data by converting to list and to numpy array np.array(list(values), dtype)
 
         #################################################################################################
@@ -333,7 +361,13 @@ if __name__ == '__main__':
         # 5) Checking for the effect of tumor location
         location_effects(figs_path, args, mae, pcc, tumor_locs, PAT_subjects)
 
-        # 6) Degree distributions
+        # 6) Checking for the effect of periventricularity
+        periventricularity_effects(figs_path, args, mae, pcc, tumor_ventricles, PAT_subjects)
+
+        # 6) Checking for the effect of periventricularity
+        grade_effects(figs_path, args, mae, pcc, tumor_grade, PAT_subjects)
+
+        # 7) Degree distributions
         plot_degree_distribution(figs_path, args, folder+args.model+'_degree_distribution.tsv')
 
     # TODO: 

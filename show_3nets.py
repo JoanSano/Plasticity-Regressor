@@ -189,8 +189,8 @@ cbar = fig.colorbar(one, cax=cbar_ax, orientation='horizontal', ticklocation='to
 cbar.set_label(label='Connection Strength', fontsize=16, weight='bold')
 cbar.ax.tick_params(labelsize=12)
 
-plt.savefig(f'{model1}/mlp_predictions.eps', dpi=900)
-plt.savefig(f'{model1}/mlp_predictions.png', dpi=900)
+plt.savefig(f'{model1}/mlp_predictions.eps', dpi=1000)
+plt.savefig(f'{model1}/mlp_predictions.svg', dpi=1000)
 
 ########### FIGURE HUBER ###########
 cmin, cmax = 0, 8.5
@@ -234,5 +234,5 @@ cbar = fig.colorbar(one, cax=cbar_ax, orientation='horizontal', ticklocation='to
 cbar.set_label(label='Connection Strength', fontsize=16, weight='bold')
 cbar.ax.tick_params(labelsize=12)
 
-plt.savefig(f'{model2}/huber_predictions.eps', dpi=900)
-plt.savefig(f'{model2}/huber_predictions.png', dpi=900)
+plt.savefig(f'{model2}/huber_predictions.eps', dpi=1000)
+plt.savefig(f'{model2}/huber_predictions.svg', dpi=1000)

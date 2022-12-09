@@ -4,8 +4,6 @@ Predicting structural connectivity after brain surgery in patients with brain tu
 
 Linked to publication: Bayesian Filtered Generation of Post-surgical Brain Connectomes on Tumor Patients
 
-Accepted for publication in the 4th Workshop on GRaphs in biomedicAl Image anaLysis (GRAIL 2022).
+Citation: Falcó-Roget, J., Crimi, A. (2022). Bayesian Filtered Generation of Post-surgical Brain Connectomes on Tumor Patients. In: , et al. Imaging Systems for GI Endoscopy, and Graphs in Biomedical Image Analysis. ISGIE GRAIL 2022 2022. Lecture Notes in Computer Science, vol 13754. Springer, Cham. https://doi.org/10.1007/978-3-031-21083-9_8 
 
-GitHub repository under preparation. 
-
-Contact information meanwhile: j.roget@sanoscience.org
+Contact information: j.roget@sanoscience.org
